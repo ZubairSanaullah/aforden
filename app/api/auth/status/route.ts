@@ -6,13 +6,19 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
     try {
-        const session = await auth();
+        const session =
+            await auth();
 
         if (!session?.user?.id) {
-            return NextResponse.json({
-                authenticated: false,
-                user: null,
-            });
+            return NextResponse.json(
+                {
+                    authenticated: false,
+                    user: null,
+                },
+                {
+                    status: 200,
+                }
+            );
         }
 
         const user =
@@ -31,28 +37,37 @@ export async function GET() {
             });
 
         if (!user) {
-            return NextResponse.json({
-                authenticated: false,
-                user: null,
-            });
+            return NextResponse.json(
+                {
+                    authenticated: false,
+                    user: null,
+                },
+                {
+                    status: 200,
+                }
+            );
         }
 
-        return NextResponse.json({
-            authenticated: true,
-
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                status: user.status,
-                emailVerified:
-                    user.emailVerified !== null,
-                avatarUrl: user.avatarUrl,
+        return NextResponse.json(
+            {
+                authenticated: true,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    status: user.status,
+                    emailVerified:
+                        user.emailVerified !== null,
+                    avatarUrl: user.avatarUrl,
+                },
             },
-        });
+            {
+                status: 200,
+            }
+        );
     } catch (error) {
         console.error(
-            "Aforden authentication status error:",
+            "Aforden auth status API error:",
             error
         );
 

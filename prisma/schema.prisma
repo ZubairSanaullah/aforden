@@ -30,6 +30,92 @@ enum UserStatus {
   DEACTIVATED
 }
 
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum DepartmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum JobTitleStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SkillStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SkillProficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ServiceAreaStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AvailabilityDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum TechnicianAvailabilityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TechnicianExceptionType {
+  TIME_OFF
+  VACATION
+  SICK_LEAVE
+  PERSONAL_LEAVE
+  HOLIDAY
+  TRAINING
+  UNAVAILABLE
+  OTHER
+}
+
+enum TechnicianAvailabilityExceptionStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum AssignmentWorkType {
+  WORK
+}
+
+enum TechnicianAssignmentStatus {
+  ASSIGNED
+  CANCELLED
+  COMPLETED
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+
 model User {
   id            String     @id @default(cuid())
   name          String?
@@ -39,10 +125,11 @@ model User {
   avatarUrl     String?
   status        UserStatus @default(PENDING)
 
-  memberships    WorkspaceMember[]
-  accounts       Account[]
-  sessions       Session[]
-  passwordResets PasswordResetToken[]
+  memberships     WorkspaceMember[]
+  accounts        Account[]
+  sessions        Session[]
+  passwordResets  PasswordResetToken[]
+  sentInvitations WorkspaceInvitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -58,12 +145,52 @@ model Workspace {
   logoUrl  String?
   timezone String  @default("Asia/Karachi")
 
-  memberships WorkspaceMember[]
+  memberships  WorkspaceMember[]
+  invitations  WorkspaceInvitation[]
+  organization Organization?
+  employees    Employee[]
+  departments  Department[]
+  jobTitles    JobTitle[]
+  skills       Skill[]
+  serviceAreas ServiceArea[]
+  customers    Customer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([slug])
+}
+
+model Organization {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  businessName String
+  legalName    String?
+  logoUrl      String?
+  email        String?
+  phone        String?
+  website      String?
+  description  String? @db.Text
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  country      String?
+  postalCode   String?
+
+  taxId              String?
+  registrationNumber String?
+
+  status OrganizationStatus @default(ACTIVE)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 model WorkspaceMember {
@@ -75,6 +202,7 @@ model WorkspaceMember {
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employee  Employee?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,6 +211,356 @@ model WorkspaceMember {
   @@index([userId])
   @@index([workspaceId])
   @@index([workspaceId, status])
+}
+
+model Employee {
+  id                String         @id @default(cuid())
+  workspaceId       String
+  workspaceMemberId String         @unique
+  departmentId      String?
+  jobTitleId        String?
+
+  employeeNumber    String?
+  displayName       String?
+  phone             String?
+  hireDate          DateTime?
+  status            EmployeeStatus @default(ACTIVE)
+  notes             String?        @db.Text
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceMember   WorkspaceMember    @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  jobTitle          JobTitle?          @relation(fields: [jobTitleId], references: [id], onDelete: SetNull)
+  technicianProfile TechnicianProfile?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, employeeNumber])
+  @@index([workspaceId])
+  @@index([workspaceMemberId])
+  @@index([departmentId])
+  @@index([jobTitleId])
+  @@index([status])
+}
+
+model Department {
+  id          String           @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?          @db.Text
+  status      DepartmentStatus @default(ACTIVE)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model JobTitle {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?        @db.Text
+  status      JobTitleStatus @default(ACTIVE)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model TechnicianProfile {
+  id               String   @id @default(cuid())
+  employeeId       String   @unique
+
+  licenseNumber    String?
+  yearsExperience  Int?
+  emergencyContact String?
+  notes            String?  @db.Text
+
+  employee                         Employee                            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  technicianSkills                 TechnicianSkill[]
+  technicianServiceAreas           TechnicianServiceArea[]
+  technicianAvailabilities         TechnicianAvailability[]
+  technicianAvailabilityExceptions TechnicianAvailabilityException[]
+  technicianAssignments            TechnicianAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+}
+
+model Skill {
+  id          String      @id @default(cuid())
+  workspaceId String
+
+  name        String
+  description String?     @db.Text
+  status      SkillStatus @default(ACTIVE)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  technicianSkills TechnicianSkill[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model TechnicianSkill {
+  id                  String           @id @default(cuid())
+  technicianProfileId String
+  skillId             String
+
+  proficiency     SkillProficiency @default(INTERMEDIATE)
+  yearsExperience Int?
+  notes           String?          @db.Text
+
+  technicianProfile TechnicianProfile @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+  skill             Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([technicianProfileId, skillId])
+  @@index([technicianProfileId])
+  @@index([skillId])
+}
+
+model ServiceArea {
+  id          String            @id @default(cuid())
+  workspaceId String
+
+  name        String
+  description String?           @db.Text
+  status      ServiceAreaStatus @default(ACTIVE)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  technicianServiceAreas TechnicianServiceArea[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model TechnicianServiceArea {
+  id                  String @id @default(cuid())
+  technicianProfileId String
+  serviceAreaId       String
+
+  notes String? @db.Text
+
+  technicianProfile TechnicianProfile @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+  serviceArea       ServiceArea       @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([technicianProfileId, serviceAreaId])
+  @@index([technicianProfileId])
+  @@index([serviceAreaId])
+}
+
+model TechnicianAvailability {
+  id                  String                       @id @default(cuid())
+  technicianProfileId String
+  dayOfWeek           AvailabilityDay
+  startTime           String
+  endTime             String
+  status              TechnicianAvailabilityStatus @default(ACTIVE)
+  notes               String?                      @db.Text
+
+  technicianProfile TechnicianProfile @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([technicianProfileId, dayOfWeek, startTime, endTime])
+  @@index([technicianProfileId])
+  @@index([dayOfWeek])
+  @@index([status])
+}
+
+model TechnicianAvailabilityException {
+  id                  String                                @id @default(cuid())
+  technicianProfileId String
+
+  type                TechnicianExceptionType
+  status              TechnicianAvailabilityExceptionStatus @default(ACTIVE)
+
+  title               String
+  startsAt            DateTime
+  endsAt              DateTime
+  isAllDay            Boolean                               @default(false)
+
+  notes               String?                               @db.Text
+
+  technicianProfile   TechnicianProfile                     @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime                              @default(now())
+  updatedAt           DateTime                              @updatedAt
+
+  @@index([technicianProfileId])
+  @@index([startsAt])
+  @@index([endsAt])
+  @@index([status])
+  @@index([type])
+}
+
+model TechnicianAssignment {
+  id                  String                     @id @default(cuid())
+  technicianProfileId String
+
+  workType            AssignmentWorkType         @default(WORK)
+  workReferenceId     String
+
+  status              TechnicianAssignmentStatus @default(ASSIGNED)
+
+  startsAt            DateTime
+  endsAt              DateTime
+
+  notes               String?                    @db.Text
+
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?                    @db.Text
+
+  technicianProfile   TechnicianProfile          @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  @@index([technicianProfileId])
+  @@index([workReferenceId])
+  @@index([workType])
+  @@index([status])
+  @@index([startsAt])
+  @@index([endsAt])
+  @@index([completedAt])
+  @@index([cancelledAt])
+}
+
+model WorkspaceInvitation {
+  id          String         @id @default(cuid())
+  workspaceId String
+  /// Normalized (lowercased) email address of the invited person.
+  email       String
+  invitedById String
+  role        MembershipRole @default(TECHNICIAN)
+  /// SHA-256 hex hash of the raw invitation token. Never the raw token.
+  tokenHash   String         @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([workspaceId, email])
+  @@index([expiresAt])
+}
+
+model Customer {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  customerNumber String?
+  name           String
+  email          String?
+  phone          String?
+  website        String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  postalCode     String?
+  country        String?
+  status         CustomerStatus @default(ACTIVE)
+  notes          String?        @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  contacts  CustomerContact[]
+  locations ServiceLocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, customerNumber])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([name])
+  @@index([workspaceId, status])
+}
+
+model CustomerContact {
+  id          String   @id @default(cuid())
+  customerId  String
+
+  firstName   String
+  lastName    String
+  title       String?
+  email       String?
+  phone       String?
+  mobilePhone String?
+  isPrimary   Boolean  @default(false)
+  notes       String?  @db.Text
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([customerId, isPrimary])
+}
+
+model ServiceLocation {
+  id           String   @id @default(cuid())
+  customerId   String
+
+  name         String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String?
+  postalCode   String?
+  country      String
+  latitude     Decimal?
+  longitude    Decimal?
+  notes        String?  @db.Text
+  isPrimary    Boolean  @default(false)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([customerId, isPrimary])
 }
 
 model Account {
