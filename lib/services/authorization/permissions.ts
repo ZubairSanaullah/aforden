@@ -10,6 +10,7 @@ export const PERMISSIONS = {
     WORK_ORDERS_ASSIGN: "work_orders.assign",
     WORK_ORDERS_COMPLETE:
         "work_orders.complete",
+    WORK_ORDERS_DELETE: "work_orders.delete",
 
     SCHEDULER_VIEW: "scheduler.view",
     SCHEDULER_CREATE:
@@ -30,6 +31,20 @@ export const PERMISSIONS = {
     SETTINGS_VIEW: "settings.view",
     SETTINGS_UPDATE:
         "settings.update",
+
+    SERVICE_CATALOG_VIEW: "service_catalog.view",
+    SERVICE_CATALOG_CREATE: "service_catalog.create",
+    SERVICE_CATALOG_UPDATE: "service_catalog.update",
+    SERVICE_CATALOG_DELETE: "service_catalog.delete",
+
+    ASSETS_VIEW: "assets.view",
+    ASSETS_CREATE: "assets.create",
+    ASSETS_UPDATE: "assets.update",
+    ASSETS_TRANSFER: "assets.transfer",
+    ASSETS_STATUS_CHANGE: "assets.status_change",
+    ASSETS_RETIRE: "assets.retire",
+    ASSETS_DELETE: "assets.delete",
+    ASSET_CATEGORIES_MANAGE: "asset_categories.manage",
 
     BILLING_VIEW: "billing.view",
     BILLING_MANAGE:

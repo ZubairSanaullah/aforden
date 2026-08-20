@@ -115,6 +115,66 @@ enum CustomerStatus {
   INACTIVE
 }
 
+enum ServiceCatalogStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum WorkTypeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum WorkOrderStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum WorkOrderHistoryEventType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  ASSIGNED
+  REASSIGNED
+  UNASSIGNED
+  DELETED
+}
+
+enum AssetStatus {
+  OPERATIONAL
+  DEGRADED
+  OUT_OF_SERVICE
+  IN_STORAGE
+  DECOMMISSIONED
+  RETIRED
+}
+
+enum AssetCategoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssetHistoryEventType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  LOCATION_TRANSFERRED
+  OWNERSHIP_TRANSFERRED
+  DECOMMISSIONED
+  REACTIVATED
+  RETIRED
+}
 
 model User {
   id            String     @id @default(cuid())
@@ -130,6 +190,7 @@ model User {
   sessions        Session[]
   passwordResets  PasswordResetToken[]
   sentInvitations WorkspaceInvitation[]
+  assetHistories  AssetHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,15 +206,22 @@ model Workspace {
   logoUrl  String?
   timezone String  @default("Asia/Karachi")
 
-  memberships  WorkspaceMember[]
-  invitations  WorkspaceInvitation[]
-  organization Organization?
-  employees    Employee[]
-  departments  Department[]
-  jobTitles    JobTitle[]
-  skills       Skill[]
-  serviceAreas ServiceArea[]
-  customers    Customer[]
+  memberships        WorkspaceMember[]
+  invitations        WorkspaceInvitation[]
+  organization       Organization?
+  employees          Employee[]
+  departments        Department[]
+  jobTitles          JobTitle[]
+  skills             Skill[]
+  serviceAreas       ServiceArea[]
+  customers          Customer[]
+  serviceCatalogs    ServiceCatalog[]
+  workTypes          WorkType[]
+  workOrders         WorkOrder[]
+  workOrderHistories WorkOrderHistory[]
+  assets             Asset[]
+  assetCategories    AssetCategory[]
+  assetHistories     AssetHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -200,9 +268,10 @@ model WorkspaceMember {
   role        MembershipRole   @default(TECHNICIAN)
   status      MembershipStatus @default(INVITED)
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  employee  Employee?
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employee           Employee?
+  workOrderHistories WorkOrderHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,18 +283,18 @@ model WorkspaceMember {
 }
 
 model Employee {
-  id                String         @id @default(cuid())
+  id                String  @id @default(cuid())
   workspaceId       String
-  workspaceMemberId String         @unique
+  workspaceMemberId String  @unique
   departmentId      String?
   jobTitleId        String?
 
-  employeeNumber    String?
-  displayName       String?
-  phone             String?
-  hireDate          DateTime?
-  status            EmployeeStatus @default(ACTIVE)
-  notes             String?        @db.Text
+  employeeNumber String?
+  displayName    String?
+  phone          String?
+  hireDate       DateTime?
+  status         EmployeeStatus @default(ACTIVE)
+  notes          String?        @db.Text
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceMember   WorkspaceMember    @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
@@ -281,20 +350,21 @@ model JobTitle {
 }
 
 model TechnicianProfile {
-  id               String   @id @default(cuid())
-  employeeId       String   @unique
+  id         String @id @default(cuid())
+  employeeId String @unique
 
   licenseNumber    String?
   yearsExperience  Int?
   emergencyContact String?
-  notes            String?  @db.Text
+  notes            String? @db.Text
 
-  employee                         Employee                            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee                         Employee                          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   technicianSkills                 TechnicianSkill[]
   technicianServiceAreas           TechnicianServiceArea[]
   technicianAvailabilities         TechnicianAvailability[]
   technicianAvailabilityExceptions TechnicianAvailabilityException[]
   technicianAssignments            TechnicianAssignment[]
+  workOrders                       WorkOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -303,7 +373,7 @@ model TechnicianProfile {
 }
 
 model Skill {
-  id          String      @id @default(cuid())
+  id          String @id @default(cuid())
   workspaceId String
 
   name        String
@@ -323,7 +393,7 @@ model Skill {
 }
 
 model TechnicianSkill {
-  id                  String           @id @default(cuid())
+  id                  String @id @default(cuid())
   technicianProfileId String
   skillId             String
 
@@ -343,7 +413,7 @@ model TechnicianSkill {
 }
 
 model ServiceArea {
-  id          String            @id @default(cuid())
+  id          String @id @default(cuid())
   workspaceId String
 
   name        String
@@ -401,23 +471,23 @@ model TechnicianAvailability {
 }
 
 model TechnicianAvailabilityException {
-  id                  String                                @id @default(cuid())
+  id                  String @id @default(cuid())
   technicianProfileId String
 
-  type                TechnicianExceptionType
-  status              TechnicianAvailabilityExceptionStatus @default(ACTIVE)
+  type   TechnicianExceptionType
+  status TechnicianAvailabilityExceptionStatus @default(ACTIVE)
 
-  title               String
-  startsAt            DateTime
-  endsAt              DateTime
-  isAllDay            Boolean                               @default(false)
+  title    String
+  startsAt DateTime
+  endsAt   DateTime
+  isAllDay Boolean  @default(false)
 
-  notes               String?                               @db.Text
+  notes String? @db.Text
 
-  technicianProfile   TechnicianProfile                     @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+  technicianProfile TechnicianProfile @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
 
-  createdAt           DateTime                              @default(now())
-  updatedAt           DateTime                              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([technicianProfileId])
   @@index([startsAt])
@@ -427,27 +497,27 @@ model TechnicianAvailabilityException {
 }
 
 model TechnicianAssignment {
-  id                  String                     @id @default(cuid())
+  id                  String @id @default(cuid())
   technicianProfileId String
 
-  workType            AssignmentWorkType         @default(WORK)
-  workReferenceId     String
+  workType        AssignmentWorkType @default(WORK)
+  workReferenceId String
 
-  status              TechnicianAssignmentStatus @default(ASSIGNED)
+  status TechnicianAssignmentStatus @default(ASSIGNED)
 
-  startsAt            DateTime
-  endsAt              DateTime
+  startsAt DateTime
+  endsAt   DateTime
 
-  notes               String?                    @db.Text
+  notes String? @db.Text
 
-  completedAt         DateTime?
-  cancelledAt         DateTime?
-  cancellationReason  String?                    @db.Text
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?   @db.Text
 
-  technicianProfile   TechnicianProfile          @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
+  technicianProfile TechnicianProfile @relation(fields: [technicianProfileId], references: [id], onDelete: Cascade)
 
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([technicianProfileId])
   @@index([workReferenceId])
@@ -503,8 +573,10 @@ model Customer {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  contacts  CustomerContact[]
-  locations ServiceLocation[]
+  contacts   CustomerContact[]
+  locations  ServiceLocation[]
+  workOrders WorkOrder[]
+  assets     Asset[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -517,8 +589,8 @@ model Customer {
 }
 
 model CustomerContact {
-  id          String   @id @default(cuid())
-  customerId  String
+  id         String @id @default(cuid())
+  customerId String
 
   firstName   String
   lastName    String
@@ -526,8 +598,8 @@ model CustomerContact {
   email       String?
   phone       String?
   mobilePhone String?
-  isPrimary   Boolean  @default(false)
-  notes       String?  @db.Text
+  isPrimary   Boolean @default(false)
+  notes       String? @db.Text
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
@@ -539,8 +611,8 @@ model CustomerContact {
 }
 
 model ServiceLocation {
-  id           String   @id @default(cuid())
-  customerId   String
+  id         String @id @default(cuid())
+  customerId String
 
   name         String
   addressLine1 String
@@ -554,13 +626,114 @@ model ServiceLocation {
   notes        String?  @db.Text
   isPrimary    Boolean  @default(false)
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workOrders WorkOrder[]
+  assets     Asset[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
   @@index([customerId, isPrimary])
+}
+
+model ServiceCatalog {
+  id          String               @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?              @db.Text
+  status      ServiceCatalogStatus @default(ACTIVE)
+  sortOrder   Int                  @default(0)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workTypes WorkType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([sortOrder])
+}
+
+model WorkType {
+  id                String         @id @default(cuid())
+  workspaceId       String
+  catalogId         String
+  name              String
+  code              String?
+  description       String?        @db.Text
+  estimatedDuration Int?
+  status            WorkTypeStatus @default(ACTIVE)
+  sortOrder         Int            @default(0)
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  catalog    ServiceCatalog @relation(fields: [catalogId], references: [id], onDelete: Restrict)
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([catalogId, name])
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([catalogId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([sortOrder])
+}
+
+model WorkOrder {
+  id              String @id @default(cuid())
+  workspaceId     String
+  workOrderNumber String
+
+  customerId           String
+  locationId           String
+  workTypeId           String
+  assignedTechnicianId String?
+  assetId              String?
+
+  workTypeName      String
+  workTypeCode      String?
+  estimatedDuration Int?
+
+  status   WorkOrderStatus   @default(OPEN)
+  priority WorkOrderPriority @default(MEDIUM)
+
+  title              String
+  description        String? @db.Text
+  internalNotes      String? @db.Text
+  holdReason         String? @db.Text
+  cancellationReason String? @db.Text
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer           Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  location           ServiceLocation    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  workType           WorkType           @relation(fields: [workTypeId], references: [id], onDelete: Restrict)
+  assignedTechnician TechnicianProfile? @relation(fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
+  asset              Asset?             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, workOrderNumber])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([locationId])
+  @@index([workTypeId])
+  @@index([assignedTechnicianId])
+  @@index([assetId])
+  @@index([status])
+  @@index([priority])
+  @@index([workspaceId, status])
+  @@index([createdAt])
 }
 
 model Account {
@@ -621,4 +794,125 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model WorkOrderHistory {
+  id          String                    @id @default(cuid())
+  workspaceId String
+  workOrderId String
+  eventType   WorkOrderHistoryEventType
+
+  actorMemberId String?
+  actorName     String?
+
+  field    String?
+  oldValue String? @db.Text
+  newValue String? @db.Text
+
+  metadata String? @db.Text
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorMember WorkspaceMember? @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([workOrderId])
+  @@index([workspaceId, workOrderId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([workspaceId, workOrderId, createdAt])
+}
+
+model AssetCategory {
+  id          String              @id @default(cuid())
+  workspaceId String
+  name        String
+  code        String?
+  description String?             @db.Text
+  status      AssetCategoryStatus @default(ACTIVE)
+  sortOrder   Int                 @default(0)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assets    Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([sortOrder])
+}
+
+model Asset {
+  id          String  @id @default(cuid())
+  workspaceId String
+  customerId  String?
+  locationId  String?
+  categoryId  String?
+
+  assetNumber  String
+  name         String
+  manufacturer String?
+  modelNumber  String?
+  serialNumber String?
+  status       AssetStatus @default(OPERATIONAL)
+
+  subLocationNotes  String?   @db.Text
+  installationDate  DateTime?
+  warrantyExpiresAt DateTime?
+  purchaseDate      DateTime?
+  purchaseCost      Decimal?  @db.Decimal(12, 2)
+  notes             String?   @db.Text
+  tags              String[]  @default([])
+  metadata          Json?
+
+  decommissionedAt DateTime?
+  retiredAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer   Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  location   ServiceLocation? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  category   AssetCategory?   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  history    AssetHistory[]
+  workOrders WorkOrder[]
+
+  @@unique([workspaceId, assetNumber])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([locationId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([workspaceId, serialNumber])
+  @@index([workspaceId, modelNumber])
+  @@index([workspaceId, manufacturer])
+  @@index([tags], type: Gin)
+}
+
+model AssetHistory {
+  id          String                @id @default(cuid())
+  workspaceId String
+  assetId     String
+  eventType   AssetHistoryEventType
+  actorUserId String?
+  actorRole   MembershipRole
+  reason      String?               @db.Text
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  actorUser User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([assetId])
+  @@index([workspaceId, assetId, createdAt])
 }
