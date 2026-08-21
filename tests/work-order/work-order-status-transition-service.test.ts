@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     workspaceMemberFindUnique: vi.fn(),
     workOrderFindFirst: vi.fn(),
     workOrderUpdate: vi.fn(),
+    workOrderHistoryCreate: vi.fn(),
     technicianProfileFindFirst: vi.fn(),
 }));
 
@@ -29,8 +30,15 @@ vi.mock("@/lib/prisma", () => ({
             findFirst: mocks.workOrderFindFirst,
             update: mocks.workOrderUpdate,
         },
+        workOrderHistory: {
+            create: mocks.workOrderHistoryCreate,
+        },
         technicianProfile: {
             findFirst: mocks.technicianProfileFindFirst,
+        },
+        $transaction: async (cb: any) => {
+            const { prisma: mockPrisma } = await import("@/lib/prisma");
+            return typeof cb === "function" ? await cb(mockPrisma) : cb;
         },
     },
 }));
@@ -719,15 +727,16 @@ describe("Phase 1.6.5 — WorkOrder Status Transition Service Layer", () => {
             ).rejects.toThrow(ForbiddenError);
         });
 
-        it("TECHNICIAN throws ForbiddenError when attempting ASSIGNED -> IN_PROGRESS", async () => {
+        it("TECHNICIAN succeeds for ASSIGNED -> IN_PROGRESS on own assigned WorkOrder", async () => {
             mocks.auth.mockResolvedValue({ user: { id: USER_TECH_1.id } });
             const wo = createFixtureWorkOrder("ASSIGNED", "tp_bob_1");
 
-            await expect(
-                transitionWorkOrderStatus(WS_ID, wo.id, {
-                    toStatus: "IN_PROGRESS",
-                }),
-            ).rejects.toThrow(ForbiddenError);
+            const result = await transitionWorkOrderStatus(WS_ID, wo.id, {
+                toStatus: "IN_PROGRESS",
+            });
+
+            expect(result.status).toBe("IN_PROGRESS");
+            expect(result.startedAt).toBeInstanceOf(Date);
         });
 
         it("DISPATCHER throws ForbiddenError when attempting IN_PROGRESS -> COMPLETED (audit correction)", async () => {

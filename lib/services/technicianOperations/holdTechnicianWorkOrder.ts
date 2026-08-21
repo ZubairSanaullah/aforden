@@ -40,19 +40,19 @@ export async function holdTechnicianWorkOrder(
     // 2. Validate Input Payload (holdReason required)
     const data = holdWorkOrderSchema.parse(input);
 
-    // 3. Delegate State Machine Transition to Phase 1.6 Service (Invariant 1)
-    const updatedWorkOrder = await transitionWorkOrderStatus(
-        context.workspaceId,
-        trimmedWorkOrderId,
-        {
-            toStatus: "ON_HOLD",
-            holdReason: data.holdReason,
-        }
-    );
-
-    // 4. Close Active Time Entry in Atomic Transaction (§7.3, §14)
+    // 3. Delegate State Machine Transition and Close Active Time Entry in Unified Atomic Transaction (§7.3, §14)
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx) => {
+        const updatedWorkOrder = await transitionWorkOrderStatus(
+            context.workspaceId,
+            trimmedWorkOrderId,
+            {
+                toStatus: "ON_HOLD",
+                holdReason: data.holdReason,
+            },
+            tx
+        );
+
         const activeEntry = await tx.technicianTimeEntry.findFirst({
             where: {
                 workspaceId: context.workspaceId,
@@ -76,7 +76,7 @@ export async function holdTechnicianWorkOrder(
                 },
             });
         }
-    });
 
-    return updatedWorkOrder;
+        return updatedWorkOrder;
+    });
 }

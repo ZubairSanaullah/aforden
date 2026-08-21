@@ -39,16 +39,16 @@ export async function resumeTechnicianWorkOrder(
     // 2. Validate Input Payload
     const data = resumeWorkOrderSchema.parse(input ?? {});
 
-    // 3. Delegate State Machine Transition to Phase 1.6 Service (Invariant 1)
-    const updatedWorkOrder = await transitionWorkOrderStatus(
-        context.workspaceId,
-        trimmedWorkOrderId,
-        { toStatus: "IN_PROGRESS" }
-    );
-
-    // 4. Persistence of New Active On-Site Time Entry in Atomic Transaction (§7.3, §14)
+    // 3. Delegate State Machine Transition and Create Active Time Entry in Unified Atomic Transaction (§7.3, §14)
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx) => {
+        const updatedWorkOrder = await transitionWorkOrderStatus(
+            context.workspaceId,
+            trimmedWorkOrderId,
+            { toStatus: "IN_PROGRESS" },
+            tx
+        );
+
         const appointment = await tx.scheduleAppointment.findFirst({
             where: {
                 workOrderId: trimmedWorkOrderId,
@@ -75,7 +75,7 @@ export async function resumeTechnicianWorkOrder(
                 createdByMemberId: context.membershipId,
             },
         });
-    });
 
-    return updatedWorkOrder;
+        return updatedWorkOrder;
+    });
 }

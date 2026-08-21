@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     workspaceMemberFindUnique: vi.fn(),
     workOrderFindFirst: vi.fn(),
     workOrderUpdate: vi.fn(),
+    workOrderHistoryCreate: vi.fn(),
     technicianProfileFindFirst: vi.fn(),
 }));
 
@@ -29,8 +30,15 @@ vi.mock("@/lib/prisma", () => ({
             findFirst: mocks.workOrderFindFirst,
             update: mocks.workOrderUpdate,
         },
+        workOrderHistory: {
+            create: mocks.workOrderHistoryCreate,
+        },
         technicianProfile: {
             findFirst: mocks.technicianProfileFindFirst,
+        },
+        $transaction: async (cb: any) => {
+            const { prisma: mockPrisma } = await import("@/lib/prisma");
+            return typeof cb === "function" ? await cb(mockPrisma) : cb;
         },
     },
 }));

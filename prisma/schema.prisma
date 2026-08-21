@@ -211,6 +211,51 @@ enum TimeEntryStatus {
   COMPLETED
 }
 
+enum PartStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PartUnitOfMeasure {
+  EACH
+  BOX
+  PACK
+  PAIR
+  KIT
+  FOOT
+  METER
+  LITER
+  GAL
+  LB
+  KG
+  ROLL
+  SHEET
+  SET
+}
+
+enum InventoryLocationType {
+  WAREHOUSE
+  VEHICLE
+  TECHNICIAN_STOCK
+  OTHER
+}
+
+enum InventoryLocationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StockMovementType {
+  RECEIPT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  RESERVATION
+  RELEASE
+  CONSUMPTION
+  RETURN
+}
+
 model User {
   id            String     @id @default(cuid())
   name          String?
@@ -260,6 +305,11 @@ model Workspace {
   scheduleAppointments         ScheduleAppointment[]
   scheduleAppointmentHistories ScheduleAppointmentHistory[]
   technicianTimeEntries        TechnicianTimeEntry[]
+  parts                        Part[]
+  inventoryLocations           InventoryLocation[]
+  inventoryBalances            InventoryBalance[]
+  stockMovements               StockMovement[]
+  workOrderParts               WorkOrderPart[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -314,6 +364,8 @@ model WorkspaceMember {
   undispatchedAppointments     ScheduleAppointment[]        @relation("UndispatchedByMember")
   scheduleAppointmentHistories ScheduleAppointmentHistory[]
   createdTechnicianTimeEntries TechnicianTimeEntry[]
+  stockMovements               StockMovement[]
+  workOrderParts               WorkOrderPart[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -409,6 +461,7 @@ model TechnicianProfile {
   workOrders                       WorkOrder[]
   scheduleAppointments             ScheduleAppointment[]
   technicianTimeEntries            TechnicianTimeEntry[]
+  inventoryLocations               InventoryLocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -768,6 +821,8 @@ model WorkOrder {
   asset                 Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
   scheduleAppointments  ScheduleAppointment[]
   technicianTimeEntries TechnicianTimeEntry[]
+  stockMovements        StockMovement[]
+  workOrderParts        WorkOrderPart[]
 
   @@unique([workspaceId, workOrderNumber])
   @@index([workspaceId])
@@ -1072,4 +1127,159 @@ model TechnicianTimeEntry {
   @@index([workspaceId, technicianProfileId, status])
   @@index([workspaceId, workOrderId])
   @@index([startedAt])
+}
+
+model Part {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  name              String
+  sku               String?
+  description       String?           @db.Text
+  unitOfMeasure     PartUnitOfMeasure @default(EACH)
+  unitCost          Decimal?          @db.Decimal(12, 2)
+  minimumStockLevel Decimal?          @db.Decimal(12, 4)
+  status            PartStatus        @default(ACTIVE)
+
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  balances       InventoryBalance[]
+  stockMovements StockMovement[]
+  workOrderParts WorkOrderPart[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([sku])
+}
+
+model InventoryLocation {
+  id                  String                  @id @default(cuid())
+  workspaceId         String
+  name                String
+  code                String?
+  locationType        InventoryLocationType   @default(WAREHOUSE)
+  technicianProfileId String?
+  addressLine1        String?
+  addressLine2        String?
+  city                String?
+  state               String?
+  postalCode          String?
+  country             String?
+  notes               String?                 @db.Text
+  status              InventoryLocationStatus @default(ACTIVE)
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  technicianProfile TechnicianProfile? @relation(fields: [technicianProfileId], references: [id], onDelete: SetNull)
+
+  balances           InventoryBalance[]
+  stockMovements     StockMovement[]    @relation("StockMovementLocation")
+  fromStockMovements StockMovement[]    @relation("StockMovementFromLocation")
+  toStockMovements   StockMovement[]    @relation("StockMovementToLocation")
+  workOrderParts     WorkOrderPart[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, locationType])
+  @@index([technicianProfileId])
+}
+
+model InventoryBalance {
+  id               String  @id @default(cuid())
+  workspaceId      String
+  partId           String
+  locationId       String
+  quantityOnHand   Decimal @default(0) @db.Decimal(12, 4)
+  quantityReserved Decimal @default(0) @db.Decimal(12, 4)
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  part      Part              @relation(fields: [partId], references: [id], onDelete: Restrict)
+  location  InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, partId, locationId])
+  @@index([workspaceId])
+  @@index([workspaceId, partId])
+  @@index([workspaceId, locationId])
+  @@index([partId])
+}
+
+model StockMovement {
+  id                      String            @id @default(cuid())
+  workspaceId             String
+  partId                  String
+  locationId              String?
+  movementType            StockMovementType
+  quantity                Decimal           @db.Decimal(12, 4)
+  fromLocationId          String?
+  toLocationId            String?
+  workOrderId             String?
+  originalWorkOrderPartId String?
+  unitCostSnapshot        Decimal?          @db.Decimal(12, 2)
+  reason                  String?           @db.Text
+  referenceNumber         String?
+  actorMemberId           String?
+
+  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  part                  Part               @relation(fields: [partId], references: [id], onDelete: Restrict)
+  location              InventoryLocation? @relation("StockMovementLocation", fields: [locationId], references: [id], onDelete: Restrict)
+  fromLocation          InventoryLocation? @relation("StockMovementFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation            InventoryLocation? @relation("StockMovementToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  workOrder             WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  originalWorkOrderPart WorkOrderPart?     @relation(fields: [originalWorkOrderPartId], references: [id], onDelete: SetNull)
+  actorMember           WorkspaceMember?   @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, partId])
+  @@index([workspaceId, locationId])
+  @@index([workspaceId, movementType])
+  @@index([workOrderId])
+  @@index([originalWorkOrderPartId])
+  @@index([partId, createdAt])
+  @@index([workspaceId, partId, locationId, createdAt])
+  @@index([createdAt])
+}
+
+model WorkOrderPart {
+  id                  String            @id @default(cuid())
+  workspaceId         String
+  workOrderId         String
+  partId              String
+  locationId          String
+  quantity            Decimal           @db.Decimal(12, 4)
+  unitCostAtTimeOfUse Decimal           @db.Decimal(12, 2)
+  partName            String
+  partSku             String?
+  unitOfMeasure       PartUnitOfMeasure
+  consumedByMemberId  String?
+  consumedAt          DateTime          @default(now())
+  notes               String?           @db.Text
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workOrder        WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  part             Part              @relation(fields: [partId], references: [id], onDelete: Restrict)
+  location         InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  consumedByMember WorkspaceMember?  @relation(fields: [consumedByMemberId], references: [id], onDelete: SetNull)
+  stockMovements   StockMovement[]
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, workOrderId])
+  @@index([workspaceId, partId])
+  @@index([workOrderId])
+  @@index([partId])
+  @@index([locationId])
+  @@index([consumedAt])
 }

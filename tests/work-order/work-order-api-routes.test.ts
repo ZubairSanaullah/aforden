@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     workOrderFindFirst: vi.fn(),
     workOrderCreate: vi.fn(),
     workOrderUpdate: vi.fn(),
+    workOrderHistoryCreate: vi.fn(),
     transaction: vi.fn(),
 }));
 
@@ -46,6 +47,9 @@ vi.mock("@/lib/prisma", () => ({
             findFirst: mocks.workOrderFindFirst,
             create: mocks.workOrderCreate,
             update: mocks.workOrderUpdate,
+        },
+        workOrderHistory: {
+            create: mocks.workOrderHistoryCreate,
         },
         $transaction: mocks.transaction,
     },
@@ -395,6 +399,9 @@ describe("Phase 1.6.8 — WorkOrder REST API Routes Suite", () => {
                         findFirst: mocks.workOrderFindFirst,
                         create: mocks.workOrderCreate,
                         update: mocks.workOrderUpdate,
+                    },
+                    workOrderHistory: {
+                        create: mocks.workOrderHistoryCreate,
                     },
                 });
             }

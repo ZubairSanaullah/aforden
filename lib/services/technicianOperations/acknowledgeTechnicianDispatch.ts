@@ -27,7 +27,7 @@ import type { ScheduleAppointmentReadModel } from "@/lib/services/schedule/sched
 export async function acknowledgeTechnicianDispatch(
     context: TechnicianExecutionContext,
     workOrderId: string,
-    appointmentId: string,
+    appointmentId?: string | null,
     input: unknown = {}
 ): Promise<ScheduleAppointmentReadModel> {
     // 1. Role Enforcement (Invariant 2 & Section 11)
@@ -41,23 +41,43 @@ export async function acknowledgeTechnicianDispatch(
         throw new ScheduleAppointmentNotFoundError();
     }
 
-    if (!appointmentId || typeof appointmentId !== "string" || !appointmentId.trim()) {
-        throw new ScheduleAppointmentNotFoundError();
+    const trimmedWorkOrderId = workOrderId.trim();
+
+    if (appointmentId !== undefined && appointmentId !== null) {
+        if (typeof appointmentId !== "string" || !appointmentId.trim()) {
+            throw new ScheduleAppointmentNotFoundError();
+        }
     }
 
     // 2. Resolve target appointment within tenant and verify workOrder linkage
-    const appointment = await prisma.scheduleAppointment.findFirst({
-        where: {
-            id: appointmentId.trim(),
-            workOrderId: workOrderId.trim(),
-            workspaceId: context.workspaceId,
-        },
-        select: {
-            id: true,
-            technicianId: true,
-            dispatchStatus: true,
-        },
-    });
+    let appointment;
+    if (appointmentId && typeof appointmentId === "string" && appointmentId.trim()) {
+        appointment = await prisma.scheduleAppointment.findFirst({
+            where: {
+                id: appointmentId.trim(),
+                workOrderId: trimmedWorkOrderId,
+                workspaceId: context.workspaceId,
+            },
+            select: {
+                id: true,
+                technicianId: true,
+                dispatchStatus: true,
+            },
+        });
+    } else {
+        appointment = await prisma.scheduleAppointment.findFirst({
+            where: {
+                workOrderId: trimmedWorkOrderId,
+                workspaceId: context.workspaceId,
+                technicianId: context.technicianProfileId,
+            },
+            select: {
+                id: true,
+                technicianId: true,
+                dispatchStatus: true,
+            },
+        });
+    }
 
     if (!appointment) {
         throw new ScheduleAppointmentNotFoundError();

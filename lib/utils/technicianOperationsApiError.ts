@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { authorizationErrorResponse } from "@/lib/services/authorization";
+import { authorizationErrorResponse } from "@/lib/services/authorization/authorizationResponse";
 import {
     TechnicianProfileNotFoundError,
     TechnicianNotAssignedToWorkOrderError,
@@ -73,10 +73,25 @@ export function mapTechnicianOperationsErrorToResponse(
         );
     }
 
-    // 3. Technician Operations Domain Errors
+    // 3. Syntax / JSON Parsing Errors (400 Bad Request)
+    if (error instanceof SyntaxError) {
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "INVALID_REQUEST",
+                    message: "Invalid JSON in request body.",
+                },
+            },
+            { status: 400 }
+        );
+    }
+
+    // 4. Technician Operations Domain Errors
     if (error instanceof TechnicianProfileNotFoundError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "TECHNICIAN_PROFILE_NOT_FOUND",
                     message: error.message,
@@ -89,6 +104,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof TechnicianNotAssignedToWorkOrderError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "TECHNICIAN_NOT_ASSIGNED_TO_WORK_ORDER",
                     message: error.message,
@@ -101,6 +117,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof ActiveTimeEntryExistsError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "ACTIVE_TIME_ENTRY_EXISTS",
                     message: error.message,
@@ -113,6 +130,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof TimeEntryNotFoundError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "TIME_ENTRY_NOT_FOUND",
                     message: error.message,
@@ -125,6 +143,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof TimeEntryImmutableError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "TIME_ENTRY_IMMUTABLE",
                     message: error.message,
@@ -134,10 +153,11 @@ export function mapTechnicianOperationsErrorToResponse(
         );
     }
 
-    // 4. Integrated Domain Errors (WorkOrder, Schedule)
+    // 5. Integrated Domain Errors (WorkOrder, Schedule)
     if (error instanceof WorkOrderNotFoundError || error instanceof ScheduleAppointmentNotFoundError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: error instanceof WorkOrderNotFoundError ? "WORK_ORDER_NOT_FOUND" : "SCHEDULE_APPOINTMENT_NOT_FOUND",
                     message: error.message,
@@ -150,6 +170,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof WorkOrderInvalidStatusTransitionError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "WORK_ORDER_INVALID_STATUS_TRANSITION",
                     message: error.message,
@@ -162,6 +183,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof WorkOrderCompletionPreconditionFailedError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "WORK_ORDER_COMPLETION_PRECONDITION_FAILED",
                     message: error.message,
@@ -174,6 +196,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof WorkOrderDeletionNotAllowedError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: "WORK_ORDER_DELETION_NOT_ALLOWED",
                     message: error.message,
@@ -186,6 +209,7 @@ export function mapTechnicianOperationsErrorToResponse(
     if (error instanceof DispatchNotAllowedError || error instanceof UndispatchNotAllowedError) {
         return NextResponse.json(
             {
+                success: false,
                 error: {
                     code: error instanceof DispatchNotAllowedError ? "DISPATCH_NOT_ALLOWED" : "UNDISPATCH_NOT_ALLOWED",
                     message: error.message,
@@ -195,10 +219,11 @@ export function mapTechnicianOperationsErrorToResponse(
         );
     }
 
-    // 5. Internal / Unexpected Errors (500)
+    // 6. Internal / Unexpected Errors (500)
     console.error(`[Aforden Technician Operations API] Unexpected error${context ? ` in ${context}` : ""}:`, error);
     return NextResponse.json(
         {
+            success: false,
             error: {
                 code: "INTERNAL_SERVER_ERROR",
                 message: "An unexpected error occurred while processing the technician operation.",
@@ -207,3 +232,5 @@ export function mapTechnicianOperationsErrorToResponse(
         { status: 500 }
     );
 }
+
+export const handleTechnicianOperationsApiError = mapTechnicianOperationsErrorToResponse;

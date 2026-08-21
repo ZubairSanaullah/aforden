@@ -73,7 +73,10 @@ export async function transitionWorkOrderStatus(
     workspaceId: string,
     workOrderId: string,
     input: unknown,
-): Promise<WorkOrderReadModel> {
+    txClient?: any,
+): Promise<WorkOrderReadModel & { _historyRecordId?: string }> {
+    const db = txClient ?? prisma;
+
     // --- 1. Authenticate & Authorize Workspace Context ---
     const authorization = await requireWorkspaceAuthorization(workspaceId);
     const role = authorization.membership.role;
@@ -86,7 +89,7 @@ export async function transitionWorkOrderStatus(
     }
 
     // --- 3. Tenant-Scoped WorkOrder Lookup ---
-    const workOrder = await prisma.workOrder.findFirst({
+    const workOrder = await db.workOrder.findFirst({
         where: {
             id: workOrderId,
             workspaceId,
@@ -124,7 +127,7 @@ export async function transitionWorkOrderStatus(
     // --- 7. Role-Specific Transition Authorization ---
     if (role === "TECHNICIAN") {
         // Resolve caller's TechnicianProfile in this workspace
-        const callerProfile = await prisma.technicianProfile.findFirst({
+        const callerProfile = await db.technicianProfile.findFirst({
             where: {
                 employee: {
                     workspaceId,
@@ -147,11 +150,13 @@ export async function transitionWorkOrderStatus(
             );
         }
 
-        // Binding Ruling (1.6.1 Addendum): Technicians are permitted ONLY:
-        // 1. IN_PROGRESS -> ON_HOLD
-        // 2. ON_HOLD -> IN_PROGRESS
-        // 3. IN_PROGRESS -> COMPLETED
+        // Permitted Technician Transitions (Phase 1.9 §11.1):
+        // 1. ASSIGNED -> IN_PROGRESS (Starting assigned work)
+        // 2. IN_PROGRESS -> ON_HOLD (Placing work on hold)
+        // 3. ON_HOLD -> IN_PROGRESS (Resuming work)
+        // 4. IN_PROGRESS -> COMPLETED (Completing work)
         const isPermittedTechnicianTransition =
+            (fromStatus === "ASSIGNED" && toStatus === "IN_PROGRESS") ||
             (fromStatus === "IN_PROGRESS" && toStatus === "ON_HOLD") ||
             (fromStatus === "ON_HOLD" && toStatus === "IN_PROGRESS") ||
             (fromStatus === "IN_PROGRESS" && toStatus === "COMPLETED");
@@ -225,11 +230,7 @@ export async function transitionWorkOrderStatus(
     }
 
     // --- 10. Persist Update & Operational History in Transaction ---
-    const runTx = typeof prisma.$transaction === "function"
-        ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
-        : async (cb: (tx: any) => Promise<any>) => cb(prisma);
-
-    const updated = await runTx(async (tx) => {
+    const executeInTx = async (tx: any) => {
         const wo = await tx.workOrder.update({
             where: {
                 id: workOrderId,
@@ -242,74 +243,81 @@ export async function transitionWorkOrderStatus(
             },
         });
 
-        if (tx.workOrderHistory?.create) {
-            await tx.workOrderHistory.create({
-                data: {
-                    workspaceId,
-                    workOrderId,
-                    eventType: "STATUS_CHANGED",
-                    actorMemberId: authorization.membership.id,
-                    actorName: authorization.user.name || authorization.user.email,
-                    field: "status",
-                    oldValue: fromStatus,
-                    newValue: toStatus,
-                    metadata: JSON.stringify({
-                        holdReason: updateData.holdReason ?? undefined,
-                        cancellationReason: updateData.cancellationReason ?? undefined,
-                    }),
-                },
-            });
-        }
+        const createdHistory = await tx.workOrderHistory.create({
+            data: {
+                workspaceId,
+                workOrderId,
+                eventType: "STATUS_CHANGED",
+                actorMemberId: authorization.membership.id,
+                actorName: authorization.user.name || authorization.user.email,
+                field: "status",
+                oldValue: fromStatus,
+                newValue: toStatus,
+                metadata: JSON.stringify({
+                    holdReason: updateData.holdReason ?? undefined,
+                    cancellationReason: updateData.cancellationReason ?? undefined,
+                }),
+            },
+        });
 
-        return wo;
-    });
+        return {
+            wo,
+            historyRecordId: createdHistory?.id,
+        };
+    };
+
+    const updated = txClient
+        ? await executeInTx(txClient)
+        : await prisma.$transaction(executeInTx);
 
     const locationAddress = [
-        updated.location.addressLine1,
-        updated.location.addressLine2,
-        updated.location.city,
-        updated.location.state,
-        updated.location.postalCode,
-        updated.location.country,
+        updated.wo.location.addressLine1,
+        updated.wo.location.addressLine2,
+        updated.wo.location.city,
+        updated.wo.location.state,
+        updated.wo.location.postalCode,
+        updated.wo.location.country,
     ]
         .filter(Boolean)
         .join(", ");
 
     return {
-        id: updated.id,
-        workspaceId: updated.workspaceId,
-        workOrderNumber: updated.workOrderNumber,
+        id: updated.wo.id,
+        workspaceId: updated.wo.workspaceId,
+        workOrderNumber: updated.wo.workOrderNumber,
 
-        customerId: updated.customerId,
-        customerName: updated.customer.name,
-        customerNumber: updated.customer.customerNumber,
+        customerId: updated.wo.customerId,
+        customerName: updated.wo.customer.name,
+        customerNumber: updated.wo.customer.customerNumber,
 
-        locationId: updated.locationId,
-        locationName: updated.location.name,
+        locationId: updated.wo.locationId,
+        locationName: updated.wo.location.name,
         locationAddress,
 
-        workTypeId: updated.workTypeId,
-        workTypeName: updated.workTypeName,
-        workTypeCode: updated.workTypeCode,
-        estimatedDuration: updated.estimatedDuration,
+        workTypeId: updated.wo.workTypeId,
+        workTypeName: updated.wo.workTypeName,
+        workTypeCode: updated.wo.workTypeCode,
+        estimatedDuration: updated.wo.estimatedDuration,
 
-        assignedTechnicianId: updated.assignedTechnicianId,
-        assetId: updated.assetId ?? null,
+        assignedTechnicianId: updated.wo.assignedTechnicianId,
+        assetId: updated.wo.assetId ?? null,
 
-        status: updated.status,
-        priority: updated.priority,
+        status: updated.wo.status,
+        priority: updated.wo.priority,
 
-        title: updated.title,
-        description: updated.description,
-        internalNotes: updated.internalNotes,
-        holdReason: updated.holdReason,
-        cancellationReason: updated.cancellationReason,
+        title: updated.wo.title,
+        description: updated.wo.description,
+        internalNotes: updated.wo.internalNotes,
+        holdReason: updated.wo.holdReason,
+        cancellationReason: updated.wo.cancellationReason,
 
-        startedAt: updated.startedAt,
-        completedAt: updated.completedAt,
-        cancelledAt: updated.cancelledAt,
+        startedAt: updated.wo.startedAt,
+        completedAt: updated.wo.completedAt,
+        cancelledAt: updated.wo.cancelledAt,
 
-        createdAt: updated.createdAt,
-        updatedAt: updated.updatedAt,
+        createdAt: updated.wo.createdAt,
+        updatedAt: updated.wo.updatedAt,
+
+        _historyRecordId: updated.historyRecordId,
     };
 }

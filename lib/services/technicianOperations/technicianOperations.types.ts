@@ -85,7 +85,7 @@ export interface TechnicianWorkOrderListResult {
 export const startTravelSchema = z.object({
     notes: z.string().trim().optional().nullable(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
-});
+}).strict();
 
 export type StartTravelInput = z.infer<typeof startTravelSchema>;
 
@@ -95,7 +95,7 @@ export type StartTravelInput = z.infer<typeof startTravelSchema>;
 export const startWorkOrderSchema = z.object({
     notes: z.string().trim().optional().nullable(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
-});
+}).strict();
 
 export type StartWorkOrderInput = z.infer<typeof startWorkOrderSchema>;
 
@@ -106,7 +106,7 @@ export const holdWorkOrderSchema = z.object({
     holdReason: z.string().trim().min(1, "Hold reason is required."),
     notes: z.string().trim().optional().nullable(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
-});
+}).strict();
 
 export type HoldWorkOrderInput = z.infer<typeof holdWorkOrderSchema>;
 
@@ -116,9 +116,101 @@ export type HoldWorkOrderInput = z.infer<typeof holdWorkOrderSchema>;
 export const resumeWorkOrderSchema = z.object({
     notes: z.string().trim().optional().nullable(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
-});
+}).strict();
 
 export type ResumeWorkOrderInput = z.infer<typeof resumeWorkOrderSchema>;
+
+/**
+ * Validation schema for completing a work order with optional resolution notes and media evidence references.
+ *
+ * Evidence Validation Rules (Section 8.2):
+ * - mediaUris: Max 20 URIs, each URI max 2048 characters, must be a well-formed URI format.
+ * - resolutionNotes: Max 4000 characters, trimmed.
+ * - notes: Optional generic operational note string.
+ * - metadata: Optional JSON metadata record.
+ */
+export const completeWorkOrderSchema = z.object({
+    resolutionNotes: z.string().trim().max(4000, "Resolution notes cannot exceed 4000 characters.").optional().nullable(),
+    mediaUris: z.array(
+        z.string()
+            .trim()
+            .min(1, "Media URI cannot be empty.")
+            .max(2048, "Media URI cannot exceed 2048 characters.")
+            .url("Each media URI must be a well-formed URI.")
+            .refine(
+                (uri) => {
+                    try {
+                        const parsed = new URL(uri);
+                        return (
+                            parsed.protocol === "http:" ||
+                            parsed.protocol === "https:" ||
+                            parsed.protocol === "s3:" ||
+                            parsed.protocol === "blob:"
+                        );
+                    } catch {
+                        return false;
+                    }
+                },
+                { message: "Each media URI must use a valid web or storage scheme (http, https, s3, blob)." }
+            )
+    )
+        .max(20, "A maximum of 20 media URIs can be attached per completion.")
+        .optional()
+        .nullable(),
+    notes: z.string().trim().optional().nullable(),
+    metadata: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+export type CompleteWorkOrderInput = z.infer<typeof completeWorkOrderSchema>;
+
+/**
+ * Validation schema for manually recording a technician time entry.
+ * Strictly restricted to BREAK and ADMIN (TRAVEL and ON_SITE are lifecycle-managed).
+ */
+export const recordTechnicianTimeEntrySchema = z.object({
+    entryType: z.enum(["BREAK", "ADMIN"], {
+        message: "Direct manual time entries only allow BREAK or ADMIN entry types. TRAVEL and ON_SITE are managed exclusively via lifecycle transitions.",
+    }),
+    appointmentId: z.string().trim().min(1).optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+    metadata: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+export type RecordTechnicianTimeEntryInput = z.infer<typeof recordTechnicianTimeEntrySchema>;
+
+/**
+ * Validation schema for updating/closing a technician time entry.
+ */
+export const updateTechnicianTimeEntrySchema = z.object({
+    notes: z.string().trim().optional().nullable(),
+    endedAt: z
+        .union([z.string().datetime(), z.date()])
+        .optional()
+        .nullable(),
+    metadata: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+export type UpdateTechnicianTimeEntryInput = z.infer<typeof updateTechnicianTimeEntrySchema>;
+
+/**
+ * Validation schema for administrative historical update of a technician time entry.
+ * Allows OWNER, ADMIN, and MANAGER roles to amend notes, timestamps, duration, and metadata.
+ */
+export const adminUpdateTechnicianTimeEntrySchema = z.object({
+    notes: z.string().trim().optional().nullable(),
+    startedAt: z
+        .union([z.string().datetime(), z.date()])
+        .optional(),
+    endedAt: z
+        .union([z.string().datetime(), z.date()])
+        .optional()
+        .nullable(),
+    durationMinutes: z.number().int().min(0).optional().nullable(),
+    editReason: z.string().trim().optional().nullable(),
+    metadata: z.record(z.string(), z.any()).optional().nullable(),
+}).strict();
+
+export type AdminUpdateTechnicianTimeEntryInput = z.infer<typeof adminUpdateTechnicianTimeEntrySchema>;
 
 /**
  * Canonical read model for TechnicianTimeEntry.
