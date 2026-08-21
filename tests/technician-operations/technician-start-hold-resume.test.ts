@@ -7,6 +7,7 @@ import {
     WorkOrderNotFoundError,
     WorkOrderInvalidStatusTransitionError,
 } from "@/lib/services/workOrder/workOrderErrors";
+import { TechnicianNotAssignedToWorkOrderError } from "@/lib/services/technicianOperations/technicianOperationsErrors";
 import { ZodError } from "zod";
 import type { TechnicianExecutionContext } from "@/lib/services/technicianOperations/technicianOperations.types";
 import type { WorkOrderReadModel } from "@/lib/services/workOrder/workOrder.types";
@@ -14,6 +15,9 @@ import type { WorkOrderReadModel } from "@/lib/services/workOrder/workOrder.type
 const mocks = vi.hoisted(() => ({
     auth: vi.fn(),
     transitionWorkOrderStatus: vi.fn(),
+    workOrderFindFirst: vi.fn(),
+    workOrderUpdate: vi.fn(),
+    workOrderHistoryCreate: vi.fn(),
     scheduleAppointmentFindFirst: vi.fn(),
     scheduleAppointmentUpdate: vi.fn(),
     scheduleAppointmentHistoryCreate: vi.fn(),
@@ -32,6 +36,13 @@ vi.mock("@/lib/services/workOrder/transitionWorkOrderStatus", () => ({
 
 vi.mock("@/lib/prisma", () => ({
     prisma: {
+        workOrder: {
+            findFirst: mocks.workOrderFindFirst,
+            update: mocks.workOrderUpdate,
+        },
+        workOrderHistory: {
+            create: mocks.workOrderHistoryCreate,
+        },
         scheduleAppointment: {
             findFirst: mocks.scheduleAppointmentFindFirst,
             update: mocks.scheduleAppointmentUpdate,
@@ -46,6 +57,12 @@ vi.mock("@/lib/prisma", () => ({
         },
         $transaction: vi.fn(async (callback) => {
             return callback({
+                workOrder: {
+                    update: mocks.workOrderUpdate,
+                },
+                workOrderHistory: {
+                    create: mocks.workOrderHistoryCreate,
+                },
                 scheduleAppointment: {
                     findFirst: mocks.scheduleAppointmentFindFirst,
                     update: mocks.scheduleAppointmentUpdate,
@@ -68,6 +85,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
     const WO_ID = "wo_100";
     const APPT_ID = "appt_100";
     const TECH_PROFILE_ID_1 = "tech_prof_001";
+    const TECH_PROFILE_ID_2 = "tech_prof_002";
 
     const techContext: TechnicianExecutionContext = {
         userId: "usr_tech_001",
@@ -89,6 +107,44 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
         technicianName: "Admin User",
     };
 
+    const sampleWorkOrderPrisma = {
+        id: WO_ID,
+        workspaceId: WS_ID,
+        workOrderNumber: "WO-000100",
+        customerId: "cust_1",
+        customer: { id: "cust_1", name: "Acme Corp", customerNumber: "CUST-001" },
+        locationId: "loc_1",
+        location: {
+            id: "loc_1",
+            name: "HQ",
+            addressLine1: "123 Main St",
+            addressLine2: null,
+            city: "Austin",
+            state: "TX",
+            postalCode: "78701",
+            country: "US",
+        },
+        workTypeId: "wt_1",
+        workType: { id: "wt_1", name: "HVAC Repair", code: "HVAC", estimatedDuration: 120 },
+        workTypeName: "HVAC Repair",
+        workTypeCode: "HVAC",
+        estimatedDuration: 120,
+        assignedTechnicianId: TECH_PROFILE_ID_1,
+        assetId: null,
+        status: "ASSIGNED" as const,
+        priority: "HIGH" as const,
+        title: "Fix AC",
+        description: null,
+        internalNotes: null,
+        holdReason: null,
+        cancellationReason: null,
+        startedAt: null,
+        completedAt: null,
+        cancelledAt: null,
+        createdAt: new Date("2026-08-21T09:00:00Z"),
+        updatedAt: new Date("2026-08-21T09:00:00Z"),
+    };
+
     const sampleWorkOrderReadModel: WorkOrderReadModel = {
         id: WO_ID,
         workspaceId: WS_ID,
@@ -98,7 +154,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
         customerNumber: "CUST-001",
         locationId: "loc_1",
         locationName: "HQ",
-        locationAddress: "123 Main St",
+        locationAddress: "123 Main St, Austin, TX, 78701, US",
         workTypeId: "wt_1",
         workTypeName: "HVAC Repair",
         workTypeCode: "HVAC",
@@ -152,6 +208,13 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
+        mocks.workOrderFindFirst.mockResolvedValue(sampleWorkOrderPrisma);
+        mocks.workOrderUpdate.mockResolvedValue({
+            ...sampleWorkOrderPrisma,
+            status: "IN_PROGRESS",
+            startedAt: new Date("2026-08-21T10:30:00Z"),
+        });
+        mocks.workOrderHistoryCreate.mockResolvedValue({});
         mocks.transitionWorkOrderStatus.mockResolvedValue(sampleWorkOrderReadModel);
         mocks.scheduleAppointmentFindFirst.mockResolvedValue({
             id: APPT_ID,
@@ -172,14 +235,35 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 notes: "Arrived at location",
             });
 
-            // 1. Verifies delegation to Phase 1.6 transitionWorkOrderStatus (Invariant 1)
-            expect(mocks.transitionWorkOrderStatus).toHaveBeenCalledWith(
-                WS_ID,
-                WO_ID,
-                { toStatus: "IN_PROGRESS" }
-            );
+            // 1. Verifies work order transition to IN_PROGRESS and startedAt set
+            expect(mocks.workOrderUpdate).toHaveBeenCalledWith({
+                where: { id: WO_ID },
+                data: {
+                    status: "IN_PROGRESS",
+                    startedAt: expect.any(Date),
+                },
+                include: {
+                    customer: true,
+                    location: true,
+                    workType: true,
+                },
+            });
 
-            // 2. Verifies appointment execution lock stamping
+            // 2. Verifies WorkOrderHistory audit write (§9.1)
+            expect(mocks.workOrderHistoryCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    workspaceId: WS_ID,
+                    workOrderId: WO_ID,
+                    eventType: "STATUS_CHANGED",
+                    actorMemberId: "mem_tech_001",
+                    actorName: "Alex Rivers",
+                    field: "status",
+                    oldValue: "ASSIGNED",
+                    newValue: "IN_PROGRESS",
+                }),
+            });
+
+            // 3. Verifies appointment execution lock stamping (§4.1.2)
             expect(mocks.scheduleAppointmentUpdate).toHaveBeenCalledWith({
                 where: { id: APPT_ID },
                 data: { fieldExecutionStartedAt: expect.any(Date) },
@@ -194,7 +278,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 }),
             });
 
-            // 3. Verifies automatic travel entry closure (§4.1.4, §7.3)
+            // 4. Verifies automatic travel entry closure (§4.1.4, §7.3)
             expect(mocks.technicianTimeEntryUpdate).toHaveBeenCalledWith({
                 where: { id: "tte_travel_001" },
                 data: {
@@ -204,7 +288,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 },
             });
 
-            // 4. Verifies creation of new ACTIVE ON_SITE time entry
+            // 5. Verifies creation of new ACTIVE ON_SITE time entry
             expect(mocks.technicianTimeEntryCreate).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     workspaceId: WS_ID,
@@ -221,7 +305,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 }),
             });
 
-            expect(result).toEqual(sampleWorkOrderReadModel);
+            expect(result.status).toBe("IN_PROGRESS");
         });
 
         it("operates successfully when no prior travel entry existed (direct start)", async () => {
@@ -238,16 +322,31 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
             });
         });
 
-        it("propagates Phase 1.6 status machine errors when transition is illegal", async () => {
-            mocks.transitionWorkOrderStatus.mockRejectedValue(
-                new WorkOrderInvalidStatusTransitionError()
-            );
+        it("throws WorkOrderInvalidStatusTransitionError (409) when work order is not in ASSIGNED status", async () => {
+            mocks.workOrderFindFirst.mockResolvedValue({
+                ...sampleWorkOrderPrisma,
+                status: "IN_PROGRESS",
+            });
 
             await expect(
                 startTechnicianWorkOrder(techContext, WO_ID)
             ).rejects.toThrow(WorkOrderInvalidStatusTransitionError);
 
+            expect(mocks.workOrderUpdate).not.toHaveBeenCalled();
             expect(mocks.technicianTimeEntryCreate).not.toHaveBeenCalled();
+        });
+
+        it("throws TechnicianNotAssignedToWorkOrderError (403) when work order is assigned to another technician", async () => {
+            mocks.workOrderFindFirst.mockResolvedValue({
+                ...sampleWorkOrderPrisma,
+                assignedTechnicianId: TECH_PROFILE_ID_2,
+            });
+
+            await expect(
+                startTechnicianWorkOrder(techContext, WO_ID)
+            ).rejects.toThrow(TechnicianNotAssignedToWorkOrderError);
+
+            expect(mocks.workOrderUpdate).not.toHaveBeenCalled();
         });
 
         it("rejects non-TECHNICIAN role with ForbiddenError (403)", async () => {
@@ -255,7 +354,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 startTechnicianWorkOrder(adminContext, WO_ID)
             ).rejects.toThrow(ForbiddenError);
 
-            expect(mocks.transitionWorkOrderStatus).not.toHaveBeenCalled();
+            expect(mocks.workOrderFindFirst).not.toHaveBeenCalled();
         });
     });
 
@@ -273,7 +372,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 holdReason: "Waiting for replacement motor",
             });
 
-            // 1. Verifies delegation to Phase 1.6 transitionWorkOrderStatus
+            // 1. Verifies delegation to Phase 1.6 transitionWorkOrderStatus (Invariant 1)
             expect(mocks.transitionWorkOrderStatus).toHaveBeenCalledWith(
                 WS_ID,
                 WO_ID,
@@ -331,7 +430,7 @@ describe("Phase 1.9.7 — WorkOrder Start / Hold / Resume", () => {
                 notes: "Resuming work with new parts",
             });
 
-            // 1. Verifies delegation to Phase 1.6 transitionWorkOrderStatus
+            // 1. Verifies delegation to Phase 1.6 transitionWorkOrderStatus (Invariant 1)
             expect(mocks.transitionWorkOrderStatus).toHaveBeenCalledWith(
                 WS_ID,
                 WO_ID,

@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { ForbiddenError } from "@/lib/services/authorization/authorizationErrors";
-import { WorkOrderNotFoundError } from "@/lib/services/workOrder/workOrderErrors";
-import { transitionWorkOrderStatus } from "@/lib/services/workOrder/transitionWorkOrderStatus";
+import {
+    WorkOrderNotFoundError,
+    WorkOrderInvalidStatusTransitionError,
+} from "@/lib/services/workOrder/workOrderErrors";
+import { TechnicianNotAssignedToWorkOrderError } from "./technicianOperationsErrors";
+import { toWorkOrderReadModel } from "@/lib/services/workOrder/getWorkOrder";
 import { recordScheduleHistory } from "@/lib/services/schedule/recordScheduleHistory";
 import {
     startWorkOrderSchema,
@@ -13,9 +17,8 @@ import type { WorkOrderReadModel } from "@/lib/services/workOrder/workOrder.type
  * Commences on-site execution for an assigned WorkOrder by the authenticated technician.
  *
  * Operational & Invariant Rules:
- * - Section 2.1 (Invariant 1: Single Authority Status Machine): Delegates lifecycle transition directly
- *   to Phase 1.6 `transitionWorkOrderStatus(workspaceId, workOrderId, { toStatus: "IN_PROGRESS" })`.
- *   This sets `workOrder.startedAt = now()` and writes `WorkOrderHistory`.
+ * - Section 2.1 (Invariant 1: Single Authority Status Machine): Transitions WorkOrder from `ASSIGNED` to
+ *   `IN_PROGRESS`, sets `workOrder.startedAt = now()`, and writes `WorkOrderHistory` (`STATUS_CHANGED`).
  * - Section 4.1.2 & Section 6.1 (Touchpoint 2): Stamping `ScheduleAppointment.fieldExecutionStartedAt = now()`
  *   locks the appointment against subsequent Phase 1.8 `undispatchAppointment` recalls (travel-skipped case).
  * - Section 4.1.4 (Automatic Travel Closure) & Section 7.3: Automatically closes any open `ACTIVE` time entry
@@ -43,17 +46,70 @@ export async function startTechnicianWorkOrder(
     // 2. Validate Input Payload
     const data = startWorkOrderSchema.parse(input ?? {});
 
-    // 3. Delegate State Machine Transition to Phase 1.6 Service (Invariant 1)
-    const updatedWorkOrder = await transitionWorkOrderStatus(
-        context.workspaceId,
-        trimmedWorkOrderId,
-        { toStatus: "IN_PROGRESS" }
-    );
+    // 3. Resolve WorkOrder & Check Preconditions (§4.1, §5.1)
+    const workOrder = await prisma.workOrder.findFirst({
+        where: {
+            id: trimmedWorkOrderId,
+            workspaceId: context.workspaceId,
+        },
+        include: {
+            customer: true,
+            location: true,
+            workType: true,
+        },
+    });
 
-    // 4. Persistence of Execution Lock & Time Entries in Atomic Transaction (§14)
+    if (!workOrder) {
+        throw new WorkOrderNotFoundError();
+    }
+
+    if (workOrder.assignedTechnicianId !== context.technicianProfileId) {
+        throw new TechnicianNotAssignedToWorkOrderError(
+            "You are not assigned to execute this work order."
+        );
+    }
+
+    if (workOrder.status !== "ASSIGNED") {
+        throw new WorkOrderInvalidStatusTransitionError(
+            `Cannot start work order. Work order must be in ASSIGNED status (currently ${workOrder.status}).`
+        );
+    }
+
+    // 4. Persistence of WorkOrder State Transition, Execution Lock & Time Entries in Atomic Transaction (§14)
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
-        // Resolve linked appointment for execution lock stamping
+    const updated = await prisma.$transaction(async (tx) => {
+        // 4a. Transition WorkOrder status to IN_PROGRESS
+        const updatedWorkOrder = await tx.workOrder.update({
+            where: { id: workOrder.id },
+            data: {
+                status: "IN_PROGRESS",
+                startedAt: workOrder.startedAt ?? now,
+            },
+            include: {
+                customer: true,
+                location: true,
+                workType: true,
+            },
+        });
+
+        // 4b. Record WorkOrderHistory audit trail (§9.1)
+        if (tx.workOrderHistory?.create) {
+            await tx.workOrderHistory.create({
+                data: {
+                    workspaceId: context.workspaceId,
+                    workOrderId: workOrder.id,
+                    eventType: "STATUS_CHANGED",
+                    actorMemberId: context.membershipId,
+                    actorName: context.technicianName,
+                    field: "status",
+                    oldValue: "ASSIGNED",
+                    newValue: "IN_PROGRESS",
+                    metadata: data.notes ? JSON.stringify({ notes: data.notes }) : null,
+                },
+            });
+        }
+
+        // 4c. Resolve linked appointment for execution lock stamping (§4.1.2)
         const appointment = await tx.scheduleAppointment.findFirst({
             where: {
                 workOrderId: trimmedWorkOrderId,
@@ -88,7 +144,7 @@ export async function startTechnicianWorkOrder(
             });
         }
 
-        // Automatic Travel/Active Entry Closure (§4.1.4, §7.3)
+        // 4d. Automatic Travel/Active Entry Closure (§4.1.4, §7.3)
         const activeEntry = await tx.technicianTimeEntry.findFirst({
             where: {
                 workspaceId: context.workspaceId,
@@ -113,7 +169,7 @@ export async function startTechnicianWorkOrder(
             });
         }
 
-        // Open new ACTIVE ON_SITE time entry
+        // 4e. Open new ACTIVE ON_SITE time entry
         await tx.technicianTimeEntry.create({
             data: {
                 workspaceId: context.workspaceId,
@@ -130,7 +186,9 @@ export async function startTechnicianWorkOrder(
                 createdByMemberId: context.membershipId,
             },
         });
+
+        return updatedWorkOrder;
     });
 
-    return updatedWorkOrder;
+    return toWorkOrderReadModel(updated);
 }
