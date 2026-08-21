@@ -125,6 +125,7 @@ export interface AssetOperationalSummary {
     operationalAssets: number;
     degradedAssets: number;
     outOfServiceAssets: number;
+    criticalOutOfServiceAssets: number;
     inStorageAssets: number;
     decommissionedAssets: number;
     retiredAssets: number;
@@ -133,6 +134,15 @@ export interface AssetOperationalSummary {
         categoryName: string;
         count: number;
     }>;
+}
+
+/**
+ * Summary view of an Actor (User) referenced by an AssetHistory record.
+ */
+export interface AssetActorSummary {
+    id: string | null;
+    name: string;
+    email?: string | null;
 }
 
 /**
@@ -145,6 +155,8 @@ export interface AssetHistoryReadModel {
     eventType: AssetHistoryEventType;
     actorUserId: string | null;
     actorRole: MembershipRole;
+    actorName?: string;
+    actor?: AssetActorSummary | null;
     reason: string | null;
     metadata: Record<string, any> | null;
     createdAt: Date;

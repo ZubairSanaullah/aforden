@@ -176,6 +176,41 @@ enum AssetHistoryEventType {
   RETIRED
 }
 
+enum ScheduleStatus {
+  SCHEDULED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum DispatchStatus {
+  PENDING_DISPATCH
+  DISPATCHED
+  ACKNOWLEDGED
+}
+
+enum ScheduleHistoryEventType {
+  CREATED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+  DISPATCHED
+  UNDISPATCHED
+  UPDATED
+}
+
+enum TimeEntryType {
+  TRAVEL
+  ON_SITE
+  BREAK
+  ADMIN
+}
+
+enum TimeEntryStatus {
+  ACTIVE
+  COMPLETED
+}
+
 model User {
   id            String     @id @default(cuid())
   name          String?
@@ -206,22 +241,25 @@ model Workspace {
   logoUrl  String?
   timezone String  @default("Asia/Karachi")
 
-  memberships        WorkspaceMember[]
-  invitations        WorkspaceInvitation[]
-  organization       Organization?
-  employees          Employee[]
-  departments        Department[]
-  jobTitles          JobTitle[]
-  skills             Skill[]
-  serviceAreas       ServiceArea[]
-  customers          Customer[]
-  serviceCatalogs    ServiceCatalog[]
-  workTypes          WorkType[]
-  workOrders         WorkOrder[]
-  workOrderHistories WorkOrderHistory[]
-  assets             Asset[]
-  assetCategories    AssetCategory[]
-  assetHistories     AssetHistory[]
+  memberships                  WorkspaceMember[]
+  invitations                  WorkspaceInvitation[]
+  organization                 Organization?
+  employees                    Employee[]
+  departments                  Department[]
+  jobTitles                    JobTitle[]
+  skills                       Skill[]
+  serviceAreas                 ServiceArea[]
+  customers                    Customer[]
+  serviceCatalogs              ServiceCatalog[]
+  workTypes                    WorkType[]
+  workOrders                   WorkOrder[]
+  workOrderHistories           WorkOrderHistory[]
+  assets                       Asset[]
+  assetCategories              AssetCategory[]
+  assetHistories               AssetHistory[]
+  scheduleAppointments         ScheduleAppointment[]
+  scheduleAppointmentHistories ScheduleAppointmentHistory[]
+  technicianTimeEntries        TechnicianTimeEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -268,10 +306,14 @@ model WorkspaceMember {
   role        MembershipRole   @default(TECHNICIAN)
   status      MembershipStatus @default(INVITED)
 
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  employee           Employee?
-  workOrderHistories WorkOrderHistory[]
+  user                         User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace                    Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employee                     Employee?
+  workOrderHistories           WorkOrderHistory[]
+  dispatchedAppointments       ScheduleAppointment[]        @relation("DispatchedByMember")
+  undispatchedAppointments     ScheduleAppointment[]        @relation("UndispatchedByMember")
+  scheduleAppointmentHistories ScheduleAppointmentHistory[]
+  createdTechnicianTimeEntries TechnicianTimeEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -365,6 +407,8 @@ model TechnicianProfile {
   technicianAvailabilityExceptions TechnicianAvailabilityException[]
   technicianAssignments            TechnicianAssignment[]
   workOrders                       WorkOrder[]
+  scheduleAppointments             ScheduleAppointment[]
+  technicianTimeEntries            TechnicianTimeEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -716,12 +760,14 @@ model WorkOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  customer           Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  location           ServiceLocation    @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  workType           WorkType           @relation(fields: [workTypeId], references: [id], onDelete: Restrict)
-  assignedTechnician TechnicianProfile? @relation(fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
-  asset              Asset?             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  workspace             Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer              Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  location              ServiceLocation       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  workType              WorkType              @relation(fields: [workTypeId], references: [id], onDelete: Restrict)
+  assignedTechnician    TechnicianProfile?    @relation(fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
+  asset                 Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  scheduleAppointments  ScheduleAppointment[]
+  technicianTimeEntries TechnicianTimeEntry[]
 
   @@unique([workspaceId, workOrderNumber])
   @@index([workspaceId])
@@ -915,4 +961,115 @@ model AssetHistory {
   @@index([workspaceId])
   @@index([assetId])
   @@index([workspaceId, assetId, createdAt])
+}
+
+model ScheduleAppointment {
+  id                String @id @default(cuid())
+  workspaceId       String
+  appointmentNumber String
+
+  workOrderId  String
+  technicianId String
+
+  scheduledStart  DateTime
+  scheduledEnd    DateTime
+  durationMinutes Int
+  timezone        String
+
+  status         ScheduleStatus @default(SCHEDULED)
+  dispatchStatus DispatchStatus @default(PENDING_DISPATCH)
+
+  dispatchedAt            DateTime?
+  dispatchedByMemberId    String?
+  undispatchedAt          DateTime?
+  undispatchedByMemberId  String?
+  fieldExecutionStartedAt DateTime?
+
+  cancellationReason String? @db.Text
+  notes              String? @db.Text
+  metadata           Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace             Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workOrder             WorkOrder                    @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  technician            TechnicianProfile            @relation(fields: [technicianId], references: [id], onDelete: Restrict)
+  dispatchedByMember    WorkspaceMember?             @relation("DispatchedByMember", fields: [dispatchedByMemberId], references: [id], onDelete: SetNull)
+  undispatchedByMember  WorkspaceMember?             @relation("UndispatchedByMember", fields: [undispatchedByMemberId], references: [id], onDelete: SetNull)
+  history               ScheduleAppointmentHistory[]
+  technicianTimeEntries TechnicianTimeEntry[]
+
+  @@unique([workspaceId, appointmentNumber])
+  @@index([workspaceId])
+  @@index([workOrderId])
+  @@index([technicianId])
+  @@index([workspaceId, technicianId, scheduledStart, scheduledEnd])
+  @@index([workspaceId, workOrderId])
+  @@index([workspaceId, scheduledStart, scheduledEnd])
+  @@index([workspaceId, status])
+  @@index([workspaceId, dispatchStatus])
+  @@index([scheduledStart])
+  @@index([scheduledEnd])
+}
+
+model ScheduleAppointmentHistory {
+  id            String                   @id @default(cuid())
+  workspaceId   String
+  appointmentId String
+  eventType     ScheduleHistoryEventType
+
+  actorMemberId String?
+  actorName     String?
+
+  field    String?
+  oldValue String? @db.Text
+  newValue String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  appointment ScheduleAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  actorMember WorkspaceMember?    @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([appointmentId])
+  @@index([workspaceId, appointmentId, createdAt])
+  @@index([eventType])
+}
+
+model TechnicianTimeEntry {
+  id                  String  @id @default(cuid())
+  workspaceId         String
+  technicianProfileId String
+  workOrderId         String
+  appointmentId       String?
+
+  entryType TimeEntryType   @default(ON_SITE)
+  status    TimeEntryStatus @default(ACTIVE)
+
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMinutes Int?
+
+  notes    String? @db.Text
+  metadata Json?
+
+  createdByMemberId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  technicianProfile TechnicianProfile    @relation(fields: [technicianProfileId], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder            @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  appointment       ScheduleAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdByMember   WorkspaceMember      @relation(fields: [createdByMemberId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@index([technicianProfileId])
+  @@index([workOrderId])
+  @@index([workspaceId, technicianProfileId, status])
+  @@index([workspaceId, workOrderId])
+  @@index([startedAt])
 }

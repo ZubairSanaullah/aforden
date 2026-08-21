@@ -147,11 +147,13 @@ export async function transitionWorkOrderStatus(
             );
         }
 
-        // Binding Ruling (1.6.1 Addendum): Technicians are permitted ONLY:
-        // 1. IN_PROGRESS -> ON_HOLD
-        // 2. ON_HOLD -> IN_PROGRESS
-        // 3. IN_PROGRESS -> COMPLETED
+        // Phase 1.9.1 & 1.9.7: Technicians are permitted:
+        // 1. ASSIGNED -> IN_PROGRESS
+        // 2. IN_PROGRESS -> ON_HOLD
+        // 3. ON_HOLD -> IN_PROGRESS
+        // 4. IN_PROGRESS -> COMPLETED
         const isPermittedTechnicianTransition =
+            (fromStatus === "ASSIGNED" && toStatus === "IN_PROGRESS") ||
             (fromStatus === "IN_PROGRESS" && toStatus === "ON_HOLD") ||
             (fromStatus === "ON_HOLD" && toStatus === "IN_PROGRESS") ||
             (fromStatus === "IN_PROGRESS" && toStatus === "COMPLETED");

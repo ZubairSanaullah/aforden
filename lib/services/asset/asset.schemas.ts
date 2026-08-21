@@ -523,3 +523,62 @@ export const getAssetsQuerySchema = z.object({
 
 export const GetAssetsQuerySchema = getAssetsQuerySchema;
 export type GetAssetsQuerySchemaInput = z.infer<typeof getAssetsQuerySchema>;
+
+export const ASSET_HISTORY_EVENT_TYPES = [
+    "CREATED",
+    "UPDATED",
+    "STATUS_CHANGED",
+    "LOCATION_TRANSFERRED",
+    "OWNERSHIP_TRANSFERRED",
+    "DECOMMISSIONED",
+    "REACTIVATED",
+    "RETIRED",
+] as const;
+
+export type AssetHistoryEventTypeType = (typeof ASSET_HISTORY_EVENT_TYPES)[number];
+
+export const assetHistoryEventTypeSchema = z.enum(ASSET_HISTORY_EVENT_TYPES, {
+    error: "Event type must be one of: CREATED, UPDATED, STATUS_CHANGED, LOCATION_TRANSFERRED, OWNERSHIP_TRANSFERRED, DECOMMISSIONED, REACTIVATED, RETIRED.",
+});
+
+/**
+ * Query parameter schema for AssetHistory timeline retrieval.
+ *
+ * Endpoint: GET /api/assets/[assetId]/history
+ */
+export const getAssetHistoryQuerySchema = z.object({
+    eventType: z
+        .union([
+            assetHistoryEventTypeSchema,
+            z.array(assetHistoryEventTypeSchema),
+            z
+                .string()
+                .trim()
+                .transform((val) => val.split(",").map((s) => s.trim()).filter(Boolean))
+                .pipe(z.array(assetHistoryEventTypeSchema)),
+        ])
+        .optional(),
+
+    page: z
+        .coerce.number()
+        .int("Page must be an integer.")
+        .min(1, "Page must be greater than or equal to 1.")
+        .default(1),
+
+    pageSize: z
+        .coerce.number()
+        .int("Page size must be an integer.")
+        .min(1, "Page size must be greater than or equal to 1.")
+        .max(100, "Page size cannot exceed 100.")
+        .default(20),
+
+    sortOrder: z
+        .enum(["asc", "desc"], {
+            error: "Sort order must be 'asc' or 'desc'.",
+        })
+        .default("desc"),
+});
+
+export const GetAssetHistoryQuerySchema = getAssetHistoryQuerySchema;
+export type GetAssetHistoryQuerySchemaInput = z.infer<typeof getAssetHistoryQuerySchema>;
+

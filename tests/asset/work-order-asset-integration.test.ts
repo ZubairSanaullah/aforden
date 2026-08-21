@@ -227,6 +227,15 @@ describe("Phase 1.7.7 — WorkOrder <-> Asset Integration Tests", () => {
                 status: "OPERATIONAL",
             },
             {
+                id: "ast_matched_2",
+                workspaceId: WS_ID,
+                assetNumber: "AST-000105",
+                name: "Chiller Unit A2",
+                customerId: "cust_1",
+                locationId: "loc_1",
+                status: "OPERATIONAL",
+            },
+            {
                 id: "ast_diff_loc",
                 workspaceId: WS_ID,
                 assetNumber: "AST-000101",
@@ -552,6 +561,45 @@ describe("Phase 1.7.7 — WorkOrder <-> Asset Integration Tests", () => {
             });
 
             expect(updated.assetId).toBeNull();
+        });
+
+        it("changes assetId from one valid asset to another valid matching asset", async () => {
+            workOrdersList[0].assetId = "ast_matched";
+
+            const updated = await updateWorkOrder(WS_ID, "wo_1", {
+                assetId: "ast_matched_2",
+            });
+
+            expect(updated.assetId).toBe("ast_matched_2");
+            expect(workOrdersList[0].assetId).toBe("ast_matched_2");
+        });
+
+        it("re-applies consistency validation when changing an already-populated assetId to an invalid asset", async () => {
+            workOrdersList[0].assetId = "ast_matched";
+
+            // Attempt change to asset belonging to a different customer
+            await expect(
+                updateWorkOrder(WS_ID, "wo_1", {
+                    assetId: "ast_diff_cust",
+                })
+            ).rejects.toThrow(WorkOrderAssetCustomerMismatchError);
+
+            // Attempt change to asset at a different location
+            await expect(
+                updateWorkOrder(WS_ID, "wo_1", {
+                    assetId: "ast_diff_loc",
+                })
+            ).rejects.toThrow(WorkOrderAssetLocationMismatchError);
+
+            // Attempt change to a retired asset
+            await expect(
+                updateWorkOrder(WS_ID, "wo_1", {
+                    assetId: "ast_retired",
+                })
+            ).rejects.toThrow(AssetImmutableError);
+
+            // Verify original assetId was not mutated on failure
+            expect(workOrdersList[0].assetId).toBe("ast_matched");
         });
 
         it("rejects attaching an asset belonging to a different customer", async () => {
