@@ -148,6 +148,7 @@ describe("Phase 1.5.10 — Service Catalog Directory & Operational Read Suite", 
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

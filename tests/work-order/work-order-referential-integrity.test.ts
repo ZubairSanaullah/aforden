@@ -126,6 +126,7 @@ describe("Phase 1.6.11 — WorkOrder Referential Integrity & Historical Safety S
         slug: "alpha-ref",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -136,6 +137,7 @@ describe("Phase 1.6.11 — WorkOrder Referential Integrity & Historical Safety S
         slug: "beta-ref",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -458,6 +460,7 @@ describe("Phase 1.6.11 — WorkOrder Referential Integrity & Historical Safety S
             workTypeId: wt.id,
             assignedTechnicianId: null,
             assetId: null,
+                sourceQuoteId: null,
             workTypeName: wt.name,
             workTypeCode: wt.code,
             estimatedDuration: wt.estimatedDuration,

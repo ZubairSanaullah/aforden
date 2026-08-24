@@ -68,6 +68,7 @@ describe("Phase 1.3.2 — Organization Profile Service", () => {
             slug: "acme-corp",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         });
     }
 

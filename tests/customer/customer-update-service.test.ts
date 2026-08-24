@@ -169,6 +169,7 @@ describe("Phase 1.4.6 — Customer Update Service Layer", () => {
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

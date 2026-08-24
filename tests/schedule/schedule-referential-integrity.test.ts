@@ -342,7 +342,7 @@ describe("Phase 1.8.9 — Scheduling Referential Integrity & Historical Safety",
             // Parent WorkOrder location changed from America/New_York to Europe/London
             const modifiedParentAppointment: any = {
                 ...baseAppointment,
-                timezone: "America/New_York", // Creation snapshot remains frozen
+                timezone: "America/New_York",
                 workOrder: {
                     ...baseWorkOrder,
                     location: {

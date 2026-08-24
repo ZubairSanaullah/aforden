@@ -49,6 +49,31 @@ export const PERMISSIONS = {
     BILLING_VIEW: "billing.view",
     BILLING_MANAGE:
         "billing.manage",
+
+    // Inventory & Parts permissions (Phase 1.10)
+    PARTS_VIEW: "parts.view",
+    PARTS_CREATE: "parts.create",
+    PARTS_UPDATE: "parts.update",
+    PARTS_DELETE: "parts.delete",
+
+    INVENTORY_VIEW: "inventory.view",
+    INVENTORY_RECEIVE: "inventory.receive",
+    INVENTORY_TRANSFER: "inventory.transfer",
+    INVENTORY_ADJUST: "inventory.adjust",
+    INVENTORY_RESERVE: "inventory.reserve",
+    INVENTORY_CONSUME: "inventory.consume",
+    INVENTORY_RETURN: "inventory.return",
+
+    INVENTORY_LOCATIONS_VIEW: "inventory_locations.view",
+    INVENTORY_LOCATIONS_MANAGE: "inventory_locations.manage",
+
+    // Quotes & Estimates permissions (Phase 1.11)
+    QUOTES_VIEW: "quotes.view",
+    QUOTES_CREATE: "quotes.create",
+    QUOTES_UPDATE: "quotes.update",
+    QUOTES_DELETE: "quotes.delete",
+    QUOTES_APPROVE: "quotes.approve",
+    QUOTES_CONVERT: "quotes.convert",
 } as const;
 
 export type Permission =

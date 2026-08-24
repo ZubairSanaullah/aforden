@@ -73,6 +73,7 @@ describe("Phase 1.3.3 — Team Member Architecture (User → WorkspaceMember →
         slug: "alpha-hvac",
         logoUrl: null,
         timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         createdAt: new Date("2026-08-19T00:00:00.000Z"),
         updatedAt: new Date("2026-08-19T00:00:00.000Z"),
     };
@@ -83,6 +84,7 @@ describe("Phase 1.3.3 — Team Member Architecture (User → WorkspaceMember →
         slug: "beta-electrical",
         logoUrl: null,
         timezone: "America/New_York",
+                    defaultCurrencyCode: "USD",
         createdAt: new Date("2026-08-19T00:00:00.000Z"),
         updatedAt: new Date("2026-08-19T00:00:00.000Z"),
     };

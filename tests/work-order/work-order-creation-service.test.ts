@@ -126,6 +126,7 @@ describe("Phase 1.6.4 — WorkOrder Creation Service Layer", () => {
         slug: "alpha-ws",
         logoUrl: null,
         timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -136,6 +137,7 @@ describe("Phase 1.6.4 — WorkOrder Creation Service Layer", () => {
         slug: "beta-ws",
         logoUrl: null,
         timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -287,6 +289,7 @@ describe("Phase 1.6.4 — WorkOrder Creation Service Layer", () => {
                 workTypeId: data.workTypeId,
                 assignedTechnicianId: data.assignedTechnicianId ?? null,
                 assetId: data.assetId ?? null,
+                sourceQuoteId: data.sourceQuoteId ?? null,
                 workTypeName: data.workTypeName,
                 workTypeCode: data.workTypeCode ?? null,
                 estimatedDuration: data.estimatedDuration ?? null,

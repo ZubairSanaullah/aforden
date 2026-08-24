@@ -120,6 +120,7 @@ describe("Phase 1.5.11 — WorkOrder Consumption Contract & Boundary Hardening",
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

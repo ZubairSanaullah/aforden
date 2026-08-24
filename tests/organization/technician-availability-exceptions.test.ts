@@ -151,6 +151,7 @@ describe("Phase 1.3.12 — Technician Availability Exceptions Service Layer", ()
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

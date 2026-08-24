@@ -219,6 +219,7 @@ describe("Phase 1.5.2 — WorkType Prisma Model & Schema Integration", () => {
                     slug: "acme-hvac",
                     logoUrl: null,
                     timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                     createdAt: new Date(),
                     updatedAt: new Date(),
                 },
@@ -523,6 +524,7 @@ describe("Phase 1.5.2 — WorkType Prisma Model & Schema Integration", () => {
                 slug: "acme-services",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });

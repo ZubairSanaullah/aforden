@@ -140,6 +140,7 @@ describe("Phase 1.5.4 — ServiceCatalog Service Hardening & Security Isolation"
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

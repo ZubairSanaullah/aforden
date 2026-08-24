@@ -135,6 +135,7 @@ describe("Phase 1.6.8 — WorkOrder REST API Routes Suite", () => {
         slug: "api-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -348,6 +349,7 @@ describe("Phase 1.6.8 — WorkOrder REST API Routes Suite", () => {
                 workTypeId: data.workTypeId,
                 assignedTechnicianId: data.assignedTechnicianId ?? null,
                 assetId: data.assetId ?? null,
+                sourceQuoteId: data.sourceQuoteId ?? null,
                 workTypeName: data.workTypeName,
                 workTypeCode: data.workTypeCode ?? null,
                 estimatedDuration: data.estimatedDuration ?? null,
@@ -435,6 +437,7 @@ describe("Phase 1.6.8 — WorkOrder REST API Routes Suite", () => {
             workTypeId: FIXTURE_WORKTYPE.id,
             assignedTechnicianId: assignedTechId,
             assetId: null,
+            sourceQuoteId: null,
             workTypeName: FIXTURE_WORKTYPE.name,
             workTypeCode: FIXTURE_WORKTYPE.code,
             estimatedDuration: FIXTURE_WORKTYPE.estimatedDuration,

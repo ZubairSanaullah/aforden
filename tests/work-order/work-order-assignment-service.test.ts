@@ -137,6 +137,7 @@ describe("Phase 1.6.6 — WorkOrder Assignment Services", () => {
         slug: "assign-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -147,6 +148,7 @@ describe("Phase 1.6.6 — WorkOrder Assignment Services", () => {
         slug: "beta-assign-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -460,6 +462,7 @@ describe("Phase 1.6.6 — WorkOrder Assignment Services", () => {
             workTypeId: FIXTURE_WORKTYPE.id,
             assignedTechnicianId: assignedTechId,
             assetId: null,
+            sourceQuoteId: null,
             workTypeName: FIXTURE_WORKTYPE.name,
             workTypeCode: FIXTURE_WORKTYPE.code,
             estimatedDuration: FIXTURE_WORKTYPE.estimatedDuration,

@@ -241,6 +241,7 @@ describe("Phase 1.5.7 — RBAC Matrix Integration Across All API Endpoints", () 
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

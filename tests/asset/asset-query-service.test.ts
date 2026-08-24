@@ -94,6 +94,7 @@ describe("Phase 1.7.8 — Asset Directory & Query Architecture Suite", () => {
         slug: "alpha-equipment",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };

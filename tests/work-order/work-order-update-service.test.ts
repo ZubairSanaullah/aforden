@@ -146,6 +146,7 @@ describe("Phase 1.6.7 — WorkOrder Update & Operational Services", () => {
         slug: "update-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -156,6 +157,7 @@ describe("Phase 1.6.7 — WorkOrder Update & Operational Services", () => {
         slug: "beta-update-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -435,6 +437,7 @@ describe("Phase 1.6.7 — WorkOrder Update & Operational Services", () => {
             workTypeId: FIXTURE_WORKTYPE.id,
             assignedTechnicianId: assignedTechId,
             assetId: null,
+            sourceQuoteId: null,
             workTypeName: FIXTURE_WORKTYPE.name,
             workTypeCode: FIXTURE_WORKTYPE.code,
             estimatedDuration: FIXTURE_WORKTYPE.estimatedDuration,

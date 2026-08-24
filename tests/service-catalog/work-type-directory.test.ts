@@ -151,6 +151,7 @@ describe("Phase 1.5.10 — WorkType Directory & Dynamic Operational Availability
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

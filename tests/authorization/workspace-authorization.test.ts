@@ -87,6 +87,7 @@ describe("Aforden workspace authorization integration", () => {
             slug: "test-workspace",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         });
     }
 
@@ -269,6 +270,7 @@ describe("Aforden workspace authorization integration", () => {
                 slug: "test-workspace",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             },
             membership: {
                 id: "membership-1",
@@ -316,6 +318,7 @@ describe("Aforden workspace authorization integration", () => {
             slug: "other-workspace",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         });
 
         membershipFindUniqueMock.mockResolvedValue(

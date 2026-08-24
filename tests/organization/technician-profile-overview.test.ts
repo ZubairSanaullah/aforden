@@ -137,6 +137,7 @@ describe("Phase 1.3.13 — Technician Profile Aggregation & Read Model", () => {
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

@@ -131,6 +131,7 @@ describe("Phase 1.3.6 — Departments Service Layer", () => {
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

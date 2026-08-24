@@ -147,6 +147,7 @@ describe("Phase 1.4.14 — Customer Contact Deletion Service Suite", () => {
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

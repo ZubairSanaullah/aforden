@@ -182,6 +182,7 @@ describe("Phase 1.5.2 — ServiceCatalog Prisma Model & Schema Integration", () 
                 slug: "acme-hvac-plumbing",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date("2026-08-20T00:00:00.000Z"),
                 updatedAt: new Date("2026-08-20T00:00:00.000Z"),
                 serviceCatalogs: [
@@ -240,6 +241,7 @@ describe("Phase 1.5.2 — ServiceCatalog Prisma Model & Schema Integration", () 
                     slug: "acme-services",
                     logoUrl: null,
                     timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                     createdAt: new Date(),
                     updatedAt: new Date(),
                 },
@@ -415,6 +417,7 @@ describe("Phase 1.5.2 — ServiceCatalog Prisma Model & Schema Integration", () 
                 slug: "acme-services",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });

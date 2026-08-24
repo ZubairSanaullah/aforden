@@ -201,6 +201,7 @@ describe("Phase 1.5.7 — Service Catalog & Work Type Lifecycle Integration Suit
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date(),
             updatedAt: new Date(),
         };

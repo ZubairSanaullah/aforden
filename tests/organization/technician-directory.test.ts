@@ -126,6 +126,7 @@ describe("Phase 1.3.14 — Technician Directory & Listing Read Model", () => {
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

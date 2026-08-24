@@ -112,6 +112,7 @@ describe("Phase 1.3.1 — Organization Architecture & Business Profile Model", (
                 slug: "acme-workspace",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date("2026-08-19T00:00:00.000Z"),
                 updatedAt: new Date("2026-08-19T00:00:00.000Z"),
                 organization: {
@@ -160,6 +161,7 @@ describe("Phase 1.3.1 — Organization Architecture & Business Profile Model", (
                 slug: "fresh-workspace",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date("2026-08-19T00:00:00.000Z"),
                 updatedAt: new Date("2026-08-19T00:00:00.000Z"),
                 organization: null,
@@ -203,6 +205,7 @@ describe("Phase 1.3.1 — Organization Architecture & Business Profile Model", (
                     slug: "acme-workspace",
                     logoUrl: null,
                     timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                     createdAt: new Date("2026-08-19T00:00:00.000Z"),
                     updatedAt: new Date("2026-08-19T00:00:00.000Z"),
                 },
@@ -448,6 +451,7 @@ describe("Phase 1.3.1 — Organization Architecture & Business Profile Model", (
                 slug: "acme-workspace",
                 logoUrl: null,
                 timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });

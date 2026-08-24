@@ -152,6 +152,7 @@ describe("Phase 1.6.12 — WorkOrder Operational History & Audit Architecture Su
         slug: "alpha-hist",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -162,6 +163,7 @@ describe("Phase 1.6.12 — WorkOrder Operational History & Audit Architecture Su
         slug: "beta-hist",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -315,6 +317,7 @@ describe("Phase 1.6.12 — WorkOrder Operational History & Audit Architecture Su
                 workTypeId: data.workTypeId,
                 assignedTechnicianId: data.assignedTechnicianId ?? null,
                 assetId: data.assetId ?? null,
+                sourceQuoteId: data.sourceQuoteId ?? null,
                 workTypeName: data.workTypeName,
                 workTypeCode: data.workTypeCode ?? null,
                 estimatedDuration: data.estimatedDuration ?? null,
@@ -572,6 +575,7 @@ describe("Phase 1.6.12 — WorkOrder Operational History & Audit Architecture Su
             workTypeId: wt.id,
             assignedTechnicianId: null,
             assetId: null,
+                sourceQuoteId: null,
             workTypeName: wt.name,
             workTypeCode: wt.code,
             estimatedDuration: wt.estimatedDuration,

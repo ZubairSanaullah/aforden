@@ -243,6 +243,7 @@ describe("Phase 1.4.16 — Customer Contact API Routes Suite", () => {
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

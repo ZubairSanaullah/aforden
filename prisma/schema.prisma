@@ -256,6 +256,41 @@ enum StockMovementType {
   RETURN
 }
 
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum QuoteLineItemType {
+  LABOR
+  PART
+  EXPENSE
+  CUSTOM
+}
+
+enum QuoteDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum QuoteHistoryEventType {
+  CREATED
+  UPDATED
+  LINE_ITEM_ADDED
+  LINE_ITEM_UPDATED
+  LINE_ITEM_REMOVED
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CONVERTED
+  DELETED
+}
+
 model User {
   id            String     @id @default(cuid())
   name          String?
@@ -280,11 +315,12 @@ model User {
 }
 
 model Workspace {
-  id       String  @id @default(cuid())
-  name     String
-  slug     String  @unique
-  logoUrl  String?
-  timezone String  @default("Asia/Karachi")
+  id                  String  @id @default(cuid())
+  name                String
+  slug                String  @unique
+  logoUrl             String?
+  timezone            String  @default("Asia/Karachi")
+  defaultCurrencyCode String  @default("USD") @db.VarChar(3)
 
   memberships                  WorkspaceMember[]
   invitations                  WorkspaceInvitation[]
@@ -310,6 +346,9 @@ model Workspace {
   inventoryBalances            InventoryBalance[]
   stockMovements               StockMovement[]
   workOrderParts               WorkOrderPart[]
+  quotes                       Quote[]
+  quoteLineItems               QuoteLineItem[]
+  quoteHistories               QuoteHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,6 +713,7 @@ model Customer {
   locations  ServiceLocation[]
   workOrders WorkOrder[]
   assets     Asset[]
+  quotes     Quote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -726,6 +766,7 @@ model ServiceLocation {
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
   assets     Asset[]
+  quotes     Quote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -766,9 +807,10 @@ model WorkType {
   status            WorkTypeStatus @default(ACTIVE)
   sortOrder         Int            @default(0)
 
-  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  catalog    ServiceCatalog @relation(fields: [catalogId], references: [id], onDelete: Restrict)
-  workOrders WorkOrder[]
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  catalog        ServiceCatalog  @relation(fields: [catalogId], references: [id], onDelete: Restrict)
+  workOrders     WorkOrder[]
+  quoteLineItems QuoteLineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -792,6 +834,7 @@ model WorkOrder {
   workTypeId           String
   assignedTechnicianId String?
   assetId              String?
+  sourceQuoteId        String?
 
   workTypeName      String
   workTypeCode      String?
@@ -819,6 +862,7 @@ model WorkOrder {
   workType              WorkType              @relation(fields: [workTypeId], references: [id], onDelete: Restrict)
   assignedTechnician    TechnicianProfile?    @relation(fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
   asset                 Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  sourceQuote           Quote?                @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   scheduleAppointments  ScheduleAppointment[]
   technicianTimeEntries TechnicianTimeEntry[]
   stockMovements        StockMovement[]
@@ -831,6 +875,7 @@ model WorkOrder {
   @@index([workTypeId])
   @@index([assignedTechnicianId])
   @@index([assetId])
+  @@index([sourceQuoteId])
   @@index([status])
   @@index([priority])
   @@index([workspaceId, status])
@@ -1144,6 +1189,7 @@ model Part {
   balances       InventoryBalance[]
   stockMovements StockMovement[]
   workOrderParts WorkOrderPart[]
+  quoteLineItems QuoteLineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1282,4 +1328,112 @@ model WorkOrderPart {
   @@index([partId])
   @@index([locationId])
   @@index([consumedAt])
+}
+
+model Quote {
+  id                     String            @id @default(cuid())
+  workspaceId            String
+  quoteNumber            String
+  customerId             String
+  locationId             String?
+  status                 QuoteStatus       @default(DRAFT)
+  title                  String
+  description            String?           @db.Text
+  internalNotes          String?           @db.Text
+  termsAndConditions     String?           @db.Text
+  currencyCode           String            @default("USD") @db.VarChar(3)
+  validUntil             DateTime?
+  subtotal               Decimal           @default(0.00) @db.Decimal(12, 2)
+  discountType           QuoteDiscountType @default(PERCENTAGE)
+  discountValue          Decimal           @default(0.00) @db.Decimal(12, 2)
+  discountAmount         Decimal           @default(0.00) @db.Decimal(12, 2)
+  taxRate                Decimal           @default(0.00) @db.Decimal(5, 4)
+  taxAmount              Decimal           @default(0.00) @db.Decimal(12, 2)
+  total                  Decimal           @default(0.00) @db.Decimal(12, 2)
+  sentAt                 DateTime?
+  approvedAt             DateTime?
+  approvedByCustomerName String?
+  rejectedAt             DateTime?
+  rejectionReason        String?           @db.Text
+  convertedAt            DateTime?
+  convertedWorkOrderId   String?
+  convertedByMemberId    String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  location   ServiceLocation? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lineItems  QuoteLineItem[]
+  history    QuoteHistory[]
+  workOrders WorkOrder[]
+
+  @@unique([workspaceId, quoteNumber])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([locationId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([validUntil])
+  @@index([createdAt])
+}
+
+model QuoteLineItem {
+  id                String            @id @default(cuid())
+  quoteId           String
+  workspaceId       String
+  lineItemType      QuoteLineItemType @default(CUSTOM)
+  workTypeId        String?
+  partId            String?
+  name              String
+  description       String?           @db.Text
+  workTypeName      String?
+  workTypeCode      String?
+  partName          String?
+  partSku           String?
+  partUnitOfMeasure String?
+  quantity          Decimal           @default(1.00) @db.Decimal(10, 2)
+  unitPrice         Decimal           @default(0.00) @db.Decimal(12, 2)
+  unitCost          Decimal?          @db.Decimal(12, 2)
+  discountAmount    Decimal           @default(0.00) @db.Decimal(12, 2)
+  subtotal          Decimal           @default(0.00) @db.Decimal(12, 2)
+  taxRate           Decimal           @default(0.00) @db.Decimal(5, 4)
+  taxAmount         Decimal           @default(0.00) @db.Decimal(12, 2)
+  total             Decimal           @default(0.00) @db.Decimal(12, 2)
+  sortOrder         Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  quote     Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workType  WorkType? @relation(fields: [workTypeId], references: [id], onDelete: SetNull)
+  part      Part?     @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
+  @@index([workspaceId])
+  @@index([workTypeId])
+  @@index([partId])
+  @@index([sortOrder])
+}
+
+model QuoteHistory {
+  id            String                @id @default(cuid())
+  quoteId       String
+  workspaceId   String
+  eventType     QuoteHistoryEventType
+  actorMemberId String?
+  actorName     String?
+  field         String?
+  oldValue      String?               @db.Text
+  newValue      String?               @db.Text
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  quote     Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@index([workspaceId])
+  @@index([eventType])
+  @@index([createdAt])
 }

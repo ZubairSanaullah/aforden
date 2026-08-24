@@ -184,6 +184,7 @@ describe("Phase 1.7.5 — Asset Status Transition & Lifecycle Service Unit Tests
                     slug: "alpha-corp",
                     logoUrl: null,
                     timezone: "America/New_York",
+                    defaultCurrencyCode: "USD",
                     createdAt: new Date(),
                     updatedAt: new Date(),
                 },

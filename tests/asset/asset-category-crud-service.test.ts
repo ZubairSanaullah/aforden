@@ -85,6 +85,7 @@ describe("Phase 1.7.11 — AssetCategory CRUD Service Suite", () => {
         slug: "alpha-eq",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };

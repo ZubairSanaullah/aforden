@@ -65,6 +65,7 @@ describe("Phase 1.7.8 — AssetCategory Directory & Query Suite", () => {
         slug: "cat-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };

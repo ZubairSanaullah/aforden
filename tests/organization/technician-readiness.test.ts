@@ -127,6 +127,7 @@ describe("Phase 1.3.16 — Technician Operational Readiness & Validation", () =>
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

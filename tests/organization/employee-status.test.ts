@@ -111,6 +111,7 @@ describe("Phase 1.3.5 — Employee Status Lifecycle", () => {
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

@@ -83,6 +83,7 @@ describe("Phase 1.7.10 — Asset Operational History & Audit Ledger Service Suit
         slug: "alpha-eq",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };

@@ -113,6 +113,7 @@ describe("Phase 1.3.4 — Employee Profiles Service Layer", () => {
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

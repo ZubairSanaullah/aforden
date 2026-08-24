@@ -130,6 +130,7 @@ function mockActiveOwnerSession() {
         slug: "acme-corp",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
     });
     mocks.prisma.workspaceMember.findUnique.mockResolvedValue({
         id: "member-1",
@@ -155,6 +156,7 @@ function mockActiveAdminSession() {
         slug: "acme-corp",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
     });
     mocks.prisma.workspaceMember.findUnique.mockResolvedValue({
         id: "member-admin",
@@ -180,6 +182,7 @@ function mockActiveTechnicianSession() {
         slug: "acme-corp",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
     });
     mocks.prisma.workspaceMember.findUnique.mockResolvedValue({
         id: "member-tech",
@@ -1250,6 +1253,7 @@ describe("security invariants", () => {
             slug: "workspace-b",
             logoUrl: null,
             timezone: "UTC",
+        defaultCurrencyCode: "USD",
         });
 
         await expect(

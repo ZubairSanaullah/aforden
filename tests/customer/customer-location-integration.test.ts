@@ -332,6 +332,7 @@ describe("Phase 1.4.23 — Customer / Location Integration Validation Suite", ()
             slug,
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

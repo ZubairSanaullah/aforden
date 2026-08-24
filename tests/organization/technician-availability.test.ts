@@ -133,6 +133,7 @@ describe("Phase 1.3.11 — Technician Availability & Schedules Service Layer", (
             slug: "acme-hvac",
             logoUrl: null,
             timezone: "Asia/Karachi",
+        defaultCurrencyCode: "USD",
         };
         workspacesMap.set(workspaceId, workspace);
         return workspace;

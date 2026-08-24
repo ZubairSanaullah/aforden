@@ -115,6 +115,7 @@ describe("Phase 1.7.9 — Asset Deletion Service Suite", () => {
         slug: "alpha-del",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };

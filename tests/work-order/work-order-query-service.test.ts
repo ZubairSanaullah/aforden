@@ -83,6 +83,7 @@ describe("Phase 1.6.10 — WorkOrder Directory & Query Architecture Suite", () =
         slug: "query-ws",
         logoUrl: null,
         timezone: "UTC",
+        defaultCurrencyCode: "USD",
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -323,6 +324,7 @@ describe("Phase 1.6.10 — WorkOrder Directory & Query Architecture Suite", () =
             workTypeId: FIXTURE_WORK_TYPE.id,
             assignedTechnicianId: null,
             assetId: null,
+                sourceQuoteId: null,
             workTypeName: FIXTURE_WORK_TYPE.name,
             workTypeCode: FIXTURE_WORK_TYPE.code,
             estimatedDuration: FIXTURE_WORK_TYPE.estimatedDuration,
