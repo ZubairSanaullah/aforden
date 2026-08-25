@@ -291,6 +291,132 @@ enum QuoteHistoryEventType {
   DELETED
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum InvoiceLineItemType {
+  LABOR
+  PART
+  EXPENSE
+  CUSTOM
+}
+
+enum InvoiceDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH
+  CHECK
+  CREDIT_CARD
+  BANK_TRANSFER
+  ACH
+  OTHER
+}
+
+enum PaymentStatus {
+  RECORDED
+  VOIDED
+}
+
+enum InvoiceHistoryEventType {
+  CREATED
+  UPDATED
+  LINE_ITEM_ADDED
+  LINE_ITEM_UPDATED
+  LINE_ITEM_REMOVED
+  ISSUED
+  PAYMENT_APPLIED
+  PAYMENT_VOIDED
+  OVERDUE_MARKED
+  VOIDED
+  DELETED
+}
+
+enum NotificationEventType {
+  WORK_ORDER_CREATED
+  WORK_ORDER_ASSIGNED
+  WORK_ORDER_REASSIGNED
+  WORK_ORDER_UNASSIGNED
+  WORK_ORDER_STATUS_CHANGED
+  WORK_ORDER_STARTED
+  WORK_ORDER_PAUSED
+  WORK_ORDER_RESUMED
+  WORK_ORDER_COMPLETED
+  WORK_ORDER_CANCELLED
+
+  SCHEDULE_APPOINTMENT_SCHEDULED
+  SCHEDULE_APPOINTMENT_RESCHEDULED
+  SCHEDULE_DISPATCH_CHANGED
+  SCHEDULE_APPOINTMENT_APPROACHING
+
+  QUOTE_CREATED
+  QUOTE_SENT
+  QUOTE_ACCEPTED
+  QUOTE_REJECTED
+  QUOTE_EXPIRED
+
+  INVOICE_CREATED
+  INVOICE_SENT
+  INVOICE_OVERDUE
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationOutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  PARTIALLY_SENT
+  FAILED
+  SUPPRESSED
+  CANCELLED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+  PENDING_RETRY
+  EXHAUSTED
+  SKIPPED
+  SUPPRESSED
+}
+
+enum RecipientType {
+  WORKSPACE_MEMBER
+  CUSTOMER_CONTACT
+  DIRECT_RECIPIENT
+}
+
+enum NotificationPreferenceScope {
+  WORKSPACE
+  MEMBER
+  CUSTOMER
+}
+
 model User {
   id            String     @id @default(cuid())
   name          String?
@@ -349,6 +475,17 @@ model Workspace {
   quotes                       Quote[]
   quoteLineItems               QuoteLineItem[]
   quoteHistories               QuoteHistory[]
+  invoices                     Invoice[]
+  invoiceLineItems             InvoiceLineItem[]
+  payments                     Payment[]
+  invoiceHistories             InvoiceHistory[]
+  notificationOutboxes         NotificationOutbox[]
+  notifications                Notification[]
+  notificationDeliveries       NotificationDelivery[]
+  notificationTemplates        NotificationTemplate[]
+  notificationPreferences      NotificationPreference[]
+  notificationLogs             NotificationLog[]
+  inAppNotificationFeeds       InAppNotificationFeed[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -405,6 +542,8 @@ model WorkspaceMember {
   createdTechnicianTimeEntries TechnicianTimeEntry[]
   stockMovements               StockMovement[]
   workOrderParts               WorkOrderPart[]
+  recordedPayments             Payment[]                    @relation("PaymentRecordedBy")
+  voidedPayments               Payment[]                    @relation("PaymentVoidedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -714,6 +853,8 @@ model Customer {
   workOrders WorkOrder[]
   assets     Asset[]
   quotes     Quote[]
+  invoices   Invoice[]
+  payments   Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -767,6 +908,7 @@ model ServiceLocation {
   workOrders WorkOrder[]
   assets     Asset[]
   quotes     Quote[]
+  invoices   Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -807,10 +949,11 @@ model WorkType {
   status            WorkTypeStatus @default(ACTIVE)
   sortOrder         Int            @default(0)
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  catalog        ServiceCatalog  @relation(fields: [catalogId], references: [id], onDelete: Restrict)
-  workOrders     WorkOrder[]
-  quoteLineItems QuoteLineItem[]
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  catalog          ServiceCatalog    @relation(fields: [catalogId], references: [id], onDelete: Restrict)
+  workOrders       WorkOrder[]
+  quoteLineItems   QuoteLineItem[]
+  invoiceLineItems InvoiceLineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -867,6 +1010,7 @@ model WorkOrder {
   technicianTimeEntries TechnicianTimeEntry[]
   stockMovements        StockMovement[]
   workOrderParts        WorkOrderPart[]
+  invoices              Invoice[]
 
   @@unique([workspaceId, workOrderNumber])
   @@index([workspaceId])
@@ -1185,11 +1329,12 @@ model Part {
   minimumStockLevel Decimal?          @db.Decimal(12, 4)
   status            PartStatus        @default(ACTIVE)
 
-  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  balances       InventoryBalance[]
-  stockMovements StockMovement[]
-  workOrderParts WorkOrderPart[]
-  quoteLineItems QuoteLineItem[]
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  balances         InventoryBalance[]
+  stockMovements   StockMovement[]
+  workOrderParts   WorkOrderPart[]
+  quoteLineItems   QuoteLineItem[]
+  invoiceLineItems InvoiceLineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1367,6 +1512,7 @@ model Quote {
   lineItems  QuoteLineItem[]
   history    QuoteHistory[]
   workOrders WorkOrder[]
+  invoices   Invoice[]
 
   @@unique([workspaceId, quoteNumber])
   @@index([workspaceId])
@@ -1436,4 +1582,334 @@ model QuoteHistory {
   @@index([workspaceId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+model Invoice {
+  id            String @id @default(cuid())
+  workspaceId   String
+  invoiceNumber String
+
+  customerId String
+  locationId String?
+
+  quoteId     String?
+  workOrderId String?
+
+  status             InvoiceStatus @default(DRAFT)
+  title              String
+  notes              String?       @db.Text
+  internalNotes      String?       @db.Text
+  termsAndConditions String?       @db.Text
+
+  currencyCode String   @default("USD") @db.VarChar(3)
+  issueDate    DateTime @default(now())
+  dueDate      DateTime
+
+  subtotal       Decimal             @default(0.00) @db.Decimal(12, 2)
+  discountType   InvoiceDiscountType @default(PERCENTAGE)
+  discountValue  Decimal             @default(0.00) @db.Decimal(12, 2)
+  discountAmount Decimal             @default(0.00) @db.Decimal(12, 2)
+  taxRate        Decimal             @default(0.00) @db.Decimal(5, 4)
+  taxAmount      Decimal             @default(0.00) @db.Decimal(12, 2)
+  total          Decimal             @default(0.00) @db.Decimal(12, 2)
+
+  amountPaid Decimal @default(0.00) @db.Decimal(12, 2)
+  amountDue  Decimal @default(0.00) @db.Decimal(12, 2)
+
+  issuedAt   DateTime?
+  paidAt     DateTime?
+  voidedAt   DateTime?
+  voidReason String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  location  ServiceLocation? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  quote     Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  workOrder WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+  history   InvoiceHistory[]
+
+  @@unique([workspaceId, invoiceNumber])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([locationId])
+  @@index([quoteId])
+  @@index([workOrderId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([dueDate])
+  @@index([createdAt])
+}
+
+model InvoiceLineItem {
+  id          String @id @default(cuid())
+  invoiceId   String
+  workspaceId String
+
+  lineItemType InvoiceLineItemType @default(CUSTOM)
+
+  workTypeId String?
+  partId     String?
+
+  name              String
+  description       String? @db.Text
+  workTypeName      String?
+  workTypeCode      String?
+  partName          String?
+  partSku           String?
+  partUnitOfMeasure String?
+
+  quantity       Decimal  @default(1.00) @db.Decimal(10, 2)
+  unitPrice      Decimal  @default(0.00) @db.Decimal(12, 2)
+  unitCost       Decimal? @db.Decimal(12, 2)
+  discountAmount Decimal  @default(0.00) @db.Decimal(12, 2)
+  subtotal       Decimal  @default(0.00) @db.Decimal(12, 2)
+  taxRate        Decimal  @default(0.00) @db.Decimal(5, 4)
+  taxAmount      Decimal  @default(0.00) @db.Decimal(12, 2)
+  total          Decimal  @default(0.00) @db.Decimal(12, 2)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workType  WorkType? @relation(fields: [workTypeId], references: [id], onDelete: SetNull)
+  part      Part?     @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([workspaceId])
+  @@index([workTypeId])
+  @@index([partId])
+  @@index([sortOrder])
+}
+
+model Payment {
+  id            String @id @default(cuid())
+  workspaceId   String
+  invoiceId     String
+  paymentNumber String
+
+  customerId      String
+  amount          Decimal       @db.Decimal(12, 2)
+  currencyCode    String        @default("USD") @db.VarChar(3)
+  paymentMethod   PaymentMethod @default(CHECK)
+  referenceNumber String?
+  status          PaymentStatus @default(RECORDED)
+
+  paymentDate DateTime @default(now())
+  notes       String?  @db.Text
+
+  recordedByMemberId String?
+  voidedAt           DateTime?
+  voidedByMemberId   String?
+  voidReason         String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoice          Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  recordedByMember WorkspaceMember? @relation("PaymentRecordedBy", fields: [recordedByMemberId], references: [id], onDelete: SetNull)
+  voidedByMember   WorkspaceMember? @relation("PaymentVoidedBy", fields: [voidedByMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, paymentNumber])
+  @@index([workspaceId])
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentDate])
+  @@index([createdAt])
+}
+
+model InvoiceHistory {
+  id          String @id @default(cuid())
+  invoiceId   String
+  workspaceId String
+
+  eventType     InvoiceHistoryEventType
+  actorMemberId String?
+  actorName     String?
+
+  field    String?
+  oldValue String? @db.Text
+  newValue String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([workspaceId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model NotificationOutbox {
+  id            String                   @id @default(cuid())
+  workspaceId   String
+  eventType     NotificationEventType
+  sourceEntity  String                   @db.VarChar(64)
+  sourceId      String                   @db.VarChar(64)
+  dedupeKey     String                   @db.VarChar(128)
+  actorMemberId String?
+  payload       Json
+  status        NotificationOutboxStatus @default(PENDING)
+  attemptCount  Int                      @default(0)
+  errorMessage  String?                  @db.Text
+  processedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status])
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id            String                @id @default(cuid())
+  workspaceId   String
+  eventType     NotificationEventType
+  sourceEntity  String                @db.VarChar(64)
+  sourceId      String                @db.VarChar(64)
+  actorMemberId String?
+  status        NotificationStatus    @default(PENDING)
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  workspace  Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+  logs       NotificationLog[]
+
+  @@index([workspaceId, eventType])
+  @@index([workspaceId, sourceEntity, sourceId])
+  @@index([workspaceId, status])
+  @@index([createdAt])
+}
+
+model NotificationDelivery {
+  id                String                     @id @default(cuid())
+  notificationId    String
+  workspaceId       String
+  channel           NotificationChannel
+  recipientType     RecipientType
+  recipientId       String
+  destination       String                     @db.VarChar(255)
+  status            NotificationDeliveryStatus @default(PENDING)
+  attemptCount      Int                        @default(0)
+  maxAttempts       Int                        @default(5)
+  lastAttemptAt     DateTime?
+  nextAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  providerMessageId String?                    @db.VarChar(255)
+  errorCode         String?                    @db.VarChar(64)
+  errorMessage      String?                    @db.Text
+  idempotencyKey    String                     @db.VarChar(128)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  notification Notification      @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs         NotificationLog[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status])
+  @@index([status, nextAttemptAt])
+  @@index([notificationId])
+  @@index([recipientType, recipientId])
+}
+
+model NotificationTemplate {
+  id          String                @id @default(cuid())
+  workspaceId String
+  eventType   NotificationEventType
+  channel     NotificationChannel
+  locale      String                @default("en") @db.VarChar(10)
+  subject     String?               @db.VarChar(255)
+  bodyHtml    String?               @db.Text
+  bodyText    String                @db.Text
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, eventType, channel, locale])
+  @@index([workspaceId, eventType])
+}
+
+model NotificationPreference {
+  id          String                      @id @default(cuid())
+  workspaceId String
+  scope       NotificationPreferenceScope
+  scopeId     String?                     @db.VarChar(64)
+  eventType   NotificationEventType
+  channel     NotificationChannel
+  isEnabled   Boolean                     @default(true)
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, scope, scopeId, eventType, channel])
+  @@index([workspaceId, scope, scopeId])
+}
+
+model NotificationLog {
+  id                String                     @id @default(cuid())
+  workspaceId       String
+  notificationId    String
+  deliveryId        String?
+  channel           NotificationChannel
+  recipient         String                     @db.VarChar(255)
+  status            NotificationDeliveryStatus
+  attemptNumber     Int
+  provider          String                     @db.VarChar(64)
+  providerMessageId String?                    @db.VarChar(255)
+  errorCode         String?                    @db.VarChar(64)
+  errorMessage      String?                    @db.Text
+  metadata          Json?
+  createdAt         DateTime                   @default(now())
+
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  notification Notification          @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  delivery     NotificationDelivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([notificationId])
+  @@index([deliveryId])
+}
+
+model InAppNotificationFeed {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  memberId       String
+  notificationId String
+  title          String    @db.VarChar(255)
+  body           String    @db.Text
+  linkUrl        String?   @db.VarChar(512)
+  sourceEntity   String?   @db.VarChar(64)
+  sourceId       String?   @db.VarChar(64)
+  isRead         Boolean   @default(false)
+  readAt         DateTime?
+  isArchived     Boolean   @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, memberId, isRead, isArchived])
+  @@index([workspaceId, memberId, createdAt])
 }

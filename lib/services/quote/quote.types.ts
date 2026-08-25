@@ -9,6 +9,7 @@ import {
     QuoteDiscountType,
     QuoteHistoryEventType,
 } from "@/generated/prisma/enums";
+import type { WorkOrderReadModel } from "@/lib/services/workOrder/workOrder.types";
 
 export {
     QuoteStatus,
@@ -125,6 +126,32 @@ export interface PaginatedQuotesReadModel {
     totalPages: number;
 }
 
+export interface PaginatedQuoteHistoryReadModel {
+    items: QuoteHistoryReadModel[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+}
+
+export interface QuoteTimelineSummary {
+    quoteId: string;
+    quoteNumber: string;
+    status: QuoteStatus;
+    createdAt: string;
+    sentAt: string | null;
+    approvedAt: string | null;
+    approvedByCustomerName: string | null;
+    rejectedAt: string | null;
+    rejectionReason: string | null;
+    convertedAt: string | null;
+    convertedWorkOrderId: string | null;
+    validUntil: string | null;
+    isExpired: boolean;
+    isTerminal: boolean;
+    currentLifecycleMilestone: "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "CONVERTED" | "EXPIRED";
+}
+
 // ==========================================
 // SERVICE INPUT DTO INTERFACES
 // ==========================================
@@ -202,6 +229,19 @@ export interface ConvertQuoteInput {
     assignedTechnicianId?: string;
     title?: string;
     description?: string;
+}
+
+export interface ConvertQuoteResult {
+    success: boolean;
+    workOrder: WorkOrderReadModel;
+    quote: QuoteReadModel;
+}
+
+export interface QuoteHistoryQueryInput {
+    eventType?: QuoteHistoryEventType | QuoteHistoryEventType[];
+    sortOrder?: "asc" | "desc";
+    page?: number;
+    limit?: number;
 }
 
 export interface ListQuotesQueryInput {

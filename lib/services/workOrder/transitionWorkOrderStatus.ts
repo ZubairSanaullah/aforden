@@ -10,6 +10,10 @@ import {
 } from "./workOrderErrors";
 import type { WorkOrderReadModel } from "./workOrder.types";
 import type { WorkOrderStatus } from "@/generated/prisma/client";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 /**
  * Validates whether a (fromStatus, toStatus) pair exists in the locked
@@ -259,6 +263,109 @@ export async function transitionWorkOrderStatus(
                 }),
             },
         });
+
+        // Phase 1.13.9: Emit corresponding WorkOrder lifecycle notification event in same transaction
+        if (toStatus === "IN_PROGRESS") {
+            if (fromStatus === "ON_HOLD") {
+                await emitNotificationEvent(tx, {
+                    workspaceId,
+                    eventType: NotificationEventType.WORK_ORDER_RESUMED,
+                    sourceEntity: "WorkOrder",
+                    sourceId: workOrderId,
+                    actorMemberId: authorization.membership.id,
+                    payload: {
+                        workOrderId,
+                        workOrderNumber: wo.workOrderNumber,
+                        title: wo.title,
+                        customerId: wo.customerId,
+                        technicianId: wo.assignedTechnicianId ?? undefined,
+                        resumedAt: now.toISOString(),
+                    },
+                });
+            } else {
+                await emitNotificationEvent(tx, {
+                    workspaceId,
+                    eventType: NotificationEventType.WORK_ORDER_STARTED,
+                    sourceEntity: "WorkOrder",
+                    sourceId: workOrderId,
+                    actorMemberId: authorization.membership.id,
+                    payload: {
+                        workOrderId,
+                        workOrderNumber: wo.workOrderNumber,
+                        title: wo.title,
+                        customerId: wo.customerId,
+                        technicianId: wo.assignedTechnicianId ?? undefined,
+                        startedAt: (wo.startedAt ?? now).toISOString(),
+                    },
+                });
+            }
+        } else if (toStatus === "ON_HOLD") {
+            await emitNotificationEvent(tx, {
+                workspaceId,
+                eventType: NotificationEventType.WORK_ORDER_PAUSED,
+                sourceEntity: "WorkOrder",
+                sourceId: workOrderId,
+                actorMemberId: authorization.membership.id,
+                payload: {
+                    workOrderId,
+                    workOrderNumber: wo.workOrderNumber,
+                    title: wo.title,
+                    customerId: wo.customerId,
+                    technicianId: wo.assignedTechnicianId ?? undefined,
+                    pausedAt: now.toISOString(),
+                    holdReason: wo.holdReason ?? undefined,
+                },
+            });
+        } else if (toStatus === "COMPLETED") {
+            await emitNotificationEvent(tx, {
+                workspaceId,
+                eventType: NotificationEventType.WORK_ORDER_COMPLETED,
+                sourceEntity: "WorkOrder",
+                sourceId: workOrderId,
+                actorMemberId: authorization.membership.id,
+                payload: {
+                    workOrderId,
+                    workOrderNumber: wo.workOrderNumber,
+                    title: wo.title,
+                    customerId: wo.customerId,
+                    customerName: wo.customer.name,
+                    technicianId: wo.assignedTechnicianId ?? undefined,
+                    completedAt: (wo.completedAt ?? now).toISOString(),
+                },
+            });
+        } else if (toStatus === "CANCELLED") {
+            await emitNotificationEvent(tx, {
+                workspaceId,
+                eventType: NotificationEventType.WORK_ORDER_CANCELLED,
+                sourceEntity: "WorkOrder",
+                sourceId: workOrderId,
+                actorMemberId: authorization.membership.id,
+                payload: {
+                    workOrderId,
+                    workOrderNumber: wo.workOrderNumber,
+                    title: wo.title,
+                    customerId: wo.customerId,
+                    cancelledAt: (wo.cancelledAt ?? now).toISOString(),
+                    cancellationReason: wo.cancellationReason ?? undefined,
+                },
+            });
+        } else {
+            await emitNotificationEvent(tx, {
+                workspaceId,
+                eventType: NotificationEventType.WORK_ORDER_STATUS_CHANGED,
+                sourceEntity: "WorkOrder",
+                sourceId: workOrderId,
+                actorMemberId: authorization.membership.id,
+                payload: {
+                    workOrderId,
+                    workOrderNumber: wo.workOrderNumber,
+                    title: wo.title,
+                    customerId: wo.customerId,
+                    previousStatus: fromStatus,
+                    newStatus: toStatus,
+                },
+            });
+        }
 
         return {
             wo,

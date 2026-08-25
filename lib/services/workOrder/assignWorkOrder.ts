@@ -15,7 +15,13 @@ import type {
     ServiceLocation,
     WorkType,
     WorkOrder,
+    Prisma,
 } from "@/generated/prisma/client";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 export type WorkOrderWithRelations = WorkOrder & {
     customer: Customer;
@@ -96,9 +102,13 @@ export async function assignWorkOrder(
     workspaceId: string,
     workOrderId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
+    txClient?: Prisma.TransactionClient,
 ): Promise<WorkOrderReadModel> {
+    const db = txClient ?? prisma;
+
     // --- 1. Authenticate Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC Permission Assertion (OWNER, ADMIN, MANAGER, DISPATCHER) ---
     assertPermission(
@@ -110,7 +120,7 @@ export async function assignWorkOrder(
     const data = assignWorkOrderSchema.parse(input);
 
     // --- 4. Tenant-Scoped WorkOrder Lookup ---
-    const workOrder = await prisma.workOrder.findFirst({
+    const workOrder = await db.workOrder.findFirst({
         where: {
             id: workOrderId,
             workspaceId,
@@ -139,7 +149,7 @@ export async function assignWorkOrder(
     }
 
     // --- 7. Tenant-Scoped Technician Lookup (Phase 1.3 Precedent) ---
-    const technician = await prisma.technicianProfile.findFirst({
+    const technician = await db.technicianProfile.findFirst({
         where: {
             id: data.technicianId,
             employee: {
@@ -161,9 +171,11 @@ export async function assignWorkOrder(
     }
 
     // --- 9. Mutation: Set assignedTechnicianId & Record History in Transaction ---
-    const runTx = typeof prisma.$transaction === "function"
-        ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
-        : async (cb: (tx: any) => Promise<any>) => cb(prisma);
+    const runTx = txClient
+        ? async (cb: (tx: any) => Promise<any>) => cb(txClient)
+        : (typeof prisma.$transaction === "function"
+            ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+            : async (cb: (tx: any) => Promise<any>) => cb(prisma));
 
     const updated = await runTx(async (tx) => {
         const wo = await tx.workOrder.update({
@@ -198,6 +210,25 @@ export async function assignWorkOrder(
                 },
             });
         }
+
+        // Phase 1.13.9: Emit WORK_ORDER_ASSIGNED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.WORK_ORDER_ASSIGNED,
+            sourceEntity: "WorkOrder",
+            sourceId: workOrderId,
+            actorMemberId: authorization.membership.id,
+            payload: {
+                workOrderId,
+                workOrderNumber: wo.workOrderNumber,
+                title: wo.title,
+                customerId: wo.customerId,
+                customerName: wo.customer.name,
+                technicianId: technician.id,
+                technicianName: technician.employee.displayName,
+                priority: wo.priority,
+            },
+        });
 
         return wo;
     });
@@ -328,6 +359,25 @@ export async function reassignWorkOrder(
             });
         }
 
+        // Phase 1.13.9: Emit WORK_ORDER_REASSIGNED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.WORK_ORDER_REASSIGNED,
+            sourceEntity: "WorkOrder",
+            sourceId: workOrderId,
+            actorMemberId: authorization.membership.id,
+            payload: {
+                workOrderId,
+                workOrderNumber: wo.workOrderNumber,
+                title: wo.title,
+                customerId: wo.customerId,
+                customerName: wo.customer.name,
+                previousTechnicianId: workOrder.assignedTechnicianId!,
+                newTechnicianId: technician.id,
+                newTechnicianName: technician.employee.displayName,
+            },
+        });
+
         return wo;
     });
 
@@ -426,6 +476,23 @@ export async function unassignWorkOrder(
                 },
             });
         }
+
+        // Phase 1.13.9: Emit WORK_ORDER_UNASSIGNED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.WORK_ORDER_UNASSIGNED,
+            sourceEntity: "WorkOrder",
+            sourceId: workOrderId,
+            actorMemberId: authorization.membership.id,
+            payload: {
+                workOrderId,
+                workOrderNumber: wo.workOrderNumber,
+                title: wo.title,
+                customerId: wo.customerId,
+                customerName: wo.customer.name,
+                previousTechnicianId: workOrder.assignedTechnicianId!,
+            },
+        });
 
         return wo;
     });

@@ -17,6 +17,10 @@ import { mapQuoteToReadModel } from "./quoteMappers";
 import type { QuoteReadModel } from "./quote.types";
 import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import { Prisma } from "@/generated/prisma/client";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 /**
  * Creates a new Quote in DRAFT status within an authorized workspace.
@@ -141,6 +145,23 @@ export async function createQuote(
                     customerId: quote.customerId,
                     currencyCode: quote.currencyCode,
                 },
+            },
+        });
+
+        // Phase 1.13.9: Emit QUOTE_CREATED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.QUOTE_CREATED,
+            sourceEntity: "Quote",
+            sourceId: quote.id,
+            actorMemberId: authContext.membership.id,
+            payload: {
+                quoteId: quote.id,
+                quoteNumber: quote.quoteNumber,
+                title: quote.title,
+                customerId: quote.customerId,
+                customerName: quote.customer.name,
+                totalAmount: quote.total.toFixed(2),
             },
         });
 

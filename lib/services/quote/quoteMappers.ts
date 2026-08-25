@@ -55,13 +55,22 @@ export function mapQuoteLineItemToReadModel(item: any): QuoteLineItemReadModel {
 }
 
 export function mapQuoteHistoryToReadModel(hist: any): QuoteHistoryReadModel {
+    const isSystem = hist.metadata?.system === true;
+    let actorName = hist.actorName ?? null;
+
+    if (isSystem) {
+        actorName = "System";
+    } else if (hist.actorMemberId && !actorName) {
+        actorName = "Deleted User";
+    }
+
     return {
         id: hist.id,
         quoteId: hist.quoteId,
         workspaceId: hist.workspaceId,
         eventType: hist.eventType,
         actorMemberId: hist.actorMemberId ?? null,
-        actorName: hist.actorName ?? null,
+        actorName,
         field: hist.field ?? null,
         oldValue: hist.oldValue ?? null,
         newValue: hist.newValue ?? null,

@@ -19,6 +19,10 @@ import {
 import { checkTechnicianAvailability } from "./checkTechnicianAvailability";
 import { recordScheduleHistory } from "./recordScheduleHistory";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 const MAX_NUMBER_GENERATION_ATTEMPTS = 5;
 const MIN_DURATION_MS = 5 * 60 * 1000;
@@ -203,6 +207,26 @@ export async function createSchedule(
                         scheduledEnd: data.scheduledEnd,
                         durationMinutes,
                         technicianId: data.technicianId,
+                    },
+                });
+
+                // Phase 1.13.9: Emit SCHEDULE_APPOINTMENT_SCHEDULED in same transaction
+                await emitNotificationEvent(tx, {
+                    workspaceId,
+                    eventType: NotificationEventType.SCHEDULE_APPOINTMENT_SCHEDULED,
+                    sourceEntity: "ScheduleAppointment",
+                    sourceId: appt.id,
+                    actorMemberId: authorization.membership.id,
+                    payload: {
+                        appointmentId: appt.id,
+                        appointmentNumber: appt.appointmentNumber,
+                        workOrderId: appt.workOrderId,
+                        workOrderNumber: workOrder.workOrderNumber,
+                        technicianId: appt.technicianId,
+                        technicianName: (appt.technician as any)?.employee?.displayName || (appt as any).technicianName || "Technician",
+                        scheduledStart: appt.scheduledStart.toISOString(),
+                        scheduledEnd: appt.scheduledEnd.toISOString(),
+                        customerId: workOrder.customerId,
                     },
                 });
 

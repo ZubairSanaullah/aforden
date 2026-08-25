@@ -12,6 +12,11 @@
  * 5. Step 5: Per-line tax and total calculation.
  * 6. Step 6: Header totals strictly aggregated from line sums.
  * 7. Exact Decimal arithmetic throughout.
+ *
+ * NOTE TO MAINTAINERS [FORMULA SYNCHRONIZATION]:
+ * The mathematical formula and proration logic in Steps 1-6 are intentionally mirrored
+ * in `lib/services/invoice/invoiceCalculationEngine.ts`. Any formula modifications, rounding
+ * adjustments, or tie-break refinements made here MUST be synchronized with the Invoice engine.
  */
 
 import { Prisma } from "@/generated/prisma/client";

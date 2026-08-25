@@ -17,6 +17,12 @@ import {
     AssetImmutableError,
 } from "@/lib/services/asset/assetErrors";
 import type { WorkOrderReadModel } from "./workOrder.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 const MAX_NUMBER_GENERATION_ATTEMPTS = 3;
 
@@ -48,9 +54,13 @@ const MAX_NUMBER_GENERATION_ATTEMPTS = 3;
 export async function createWorkOrder(
     workspaceId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
+    txClient?: Prisma.TransactionClient,
 ): Promise<WorkOrderReadModel> {
+    const db = txClient ?? prisma;
+
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce WORK_ORDERS_CREATE permission ---
     assertPermission(
@@ -62,7 +72,7 @@ export async function createWorkOrder(
     const data = createWorkOrderSchema.parse(input);
 
     // --- 4. Tenant-Scoped Customer Resolution & Lifecycle Check ---
-    const customer = await prisma.customer.findFirst({
+    const customer = await db.customer.findFirst({
         where: {
             id: data.customerId,
             workspaceId,
@@ -78,7 +88,7 @@ export async function createWorkOrder(
     }
 
     // --- 5. Relational Parity & ServiceLocation Resolution ---
-    const location = await prisma.serviceLocation.findFirst({
+    const location = await db.serviceLocation.findFirst({
         where: {
             id: data.locationId,
             customerId: data.customerId,
@@ -97,7 +107,7 @@ export async function createWorkOrder(
 
     // --- 6.5. Optional Asset Resolution & Consistency Checks (§9.2 & §17.3) ---
     if (data.assetId) {
-        const asset = await prisma.asset.findFirst({
+        const asset = await db.asset.findFirst({
             where: {
                 id: data.assetId,
                 workspaceId,
@@ -134,9 +144,11 @@ export async function createWorkOrder(
 
     for (let attempt = 0; attempt < MAX_NUMBER_GENERATION_ATTEMPTS; attempt++) {
         try {
-            const runTx = typeof prisma.$transaction === "function"
-                ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
-                : async (cb: (tx: any) => Promise<any>) => cb(prisma);
+            const runTx = txClient
+                ? async (cb: (tx: any) => Promise<any>) => cb(txClient)
+                : (typeof prisma.$transaction === "function"
+                    ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+                    : async (cb: (tx: any) => Promise<any>) => cb(prisma));
 
             const created = await runTx(async (tx) => {
                 // Compute next sequential reference number inside the transaction
@@ -223,6 +235,23 @@ export async function createWorkOrder(
                         },
                     });
                 }
+
+                // Phase 1.13.9: Emit WORK_ORDER_CREATED event in same transaction
+                await emitNotificationEvent(tx, {
+                    workspaceId,
+                    eventType: NotificationEventType.WORK_ORDER_CREATED,
+                    sourceEntity: "WorkOrder",
+                    sourceId: wo.id,
+                    actorMemberId: authorization.membership.id,
+                    payload: {
+                        workOrderId: wo.id,
+                        workOrderNumber: wo.workOrderNumber,
+                        title: wo.title,
+                        customerId: wo.customerId,
+                        customerName: customer.name,
+                        priority: wo.priority,
+                    },
+                });
 
                 return wo;
             });

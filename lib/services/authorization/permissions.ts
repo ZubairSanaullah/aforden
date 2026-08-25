@@ -72,8 +72,22 @@ export const PERMISSIONS = {
     QUOTES_CREATE: "quotes.create",
     QUOTES_UPDATE: "quotes.update",
     QUOTES_DELETE: "quotes.delete",
+    QUOTES_SEND: "quotes.send",
     QUOTES_APPROVE: "quotes.approve",
+    QUOTES_REJECT: "quotes.reject",
     QUOTES_CONVERT: "quotes.convert",
+
+    // Invoicing & Payments permissions (Phase 1.12)
+    INVOICES_VIEW: "invoices.view",
+    INVOICES_CREATE: "invoices.create",
+    INVOICES_UPDATE: "invoices.update",
+    INVOICES_DELETE: "invoices.delete",
+    INVOICES_ISSUE: "invoices.issue",
+    INVOICES_VOID: "invoices.void",
+
+    PAYMENTS_VIEW: "payments.view",
+    PAYMENTS_CREATE: "payments.create",
+    PAYMENTS_VOID: "payments.void",
 } as const;
 
 export type Permission =

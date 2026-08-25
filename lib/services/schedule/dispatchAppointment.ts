@@ -17,6 +17,10 @@ import {
 } from "./conflictDetection";
 import { recordScheduleHistory } from "./recordScheduleHistory";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 /**
  * Dispatches an active appointment to the assigned technician for field execution.
@@ -127,6 +131,24 @@ export async function dispatchAppointment(
             newValue: "DISPATCHED",
             metadata: {
                 notes: data.notes ?? null,
+            },
+        });
+
+        // Phase 1.13.9: Emit SCHEDULE_DISPATCH_CHANGED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.SCHEDULE_DISPATCH_CHANGED,
+            sourceEntity: "ScheduleAppointment",
+            sourceId: appt.id,
+            actorMemberId: authorization.membership.id,
+            payload: {
+                appointmentId: appt.id,
+                appointmentNumber: appt.appointmentNumber,
+                workOrderId: appt.workOrderId,
+                technicianId: appt.technicianId,
+                technicianName: (appt.technician as any)?.employee?.displayName || (appt as any).technicianName || "Technician",
+                dispatchStatus: "DISPATCHED",
+                dispatchedAt: now.toISOString(),
             },
         });
 

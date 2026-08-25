@@ -15,6 +15,10 @@ import {
 import { checkTechnicianAvailability } from "./checkTechnicianAvailability";
 import { recordScheduleHistory } from "./recordScheduleHistory";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
+import {
+    emitNotificationEvent,
+    NotificationEventType,
+} from "@/lib/services/notification";
 
 const MIN_DURATION_MS = 5 * 60 * 1000;
 const MAX_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -147,6 +151,27 @@ export async function rescheduleSchedule(
                 reason: data.reason,
                 previousStatus: appt.status,
                 previousDispatchStatus: appt.dispatchStatus,
+            },
+        });
+
+        // Phase 1.13.9: Emit SCHEDULE_APPOINTMENT_RESCHEDULED in same transaction
+        await emitNotificationEvent(tx, {
+            workspaceId,
+            eventType: NotificationEventType.SCHEDULE_APPOINTMENT_RESCHEDULED,
+            sourceEntity: "ScheduleAppointment",
+            sourceId: appt.id,
+            actorMemberId: authorization.membership.id,
+            payload: {
+                appointmentId: appt.id,
+                appointmentNumber: appt.appointmentNumber,
+                workOrderId: appt.workOrderId,
+                workOrderNumber: appt.workOrder.workOrderNumber,
+                technicianId: appt.technicianId,
+                previousStart: appt.scheduledStart.toISOString(),
+                previousEnd: appt.scheduledEnd.toISOString(),
+                newStart: res.scheduledStart.toISOString(),
+                newEnd: res.scheduledEnd.toISOString(),
+                rescheduleReason: data.reason,
             },
         });
 

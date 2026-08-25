@@ -150,7 +150,7 @@ export async function resolveLineItemSnapshot(
         if (wtSnapshot) {
             workTypeName = wtSnapshot.workTypeName;
             workTypeCode = wtSnapshot.workTypeCode;
-            if (!item.lineItemType) {
+            if (!item.lineItemType || item.lineItemType === "CUSTOM") {
                 lineItemType = "LABOR";
             }
         }
@@ -163,7 +163,7 @@ export async function resolveLineItemSnapshot(
             partName = partSnapshot.partName;
             partSku = partSnapshot.partSku;
             partUnitOfMeasure = partSnapshot.partUnitOfMeasure;
-            if (!item.lineItemType) {
+            if (!item.lineItemType || item.lineItemType === "CUSTOM") {
                 lineItemType = "PART";
             }
             if (effectiveUnitCost === null && partSnapshot.unitCost !== null) {

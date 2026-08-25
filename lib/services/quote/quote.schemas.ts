@@ -30,6 +30,20 @@ export const QUOTE_DISCOUNT_TYPES = [
     "FIXED",
 ] as const;
 
+export const QUOTE_HISTORY_EVENT_TYPES = [
+    "CREATED",
+    "UPDATED",
+    "LINE_ITEM_ADDED",
+    "LINE_ITEM_UPDATED",
+    "LINE_ITEM_REMOVED",
+    "SENT",
+    "APPROVED",
+    "REJECTED",
+    "EXPIRED",
+    "CONVERTED",
+    "DELETED",
+] as const;
+
 export const quoteStatusSchema = z.enum(QUOTE_STATUSES, {
     error: `Status must be one of: ${QUOTE_STATUSES.join(", ")}.`,
 });
@@ -40,6 +54,10 @@ export const quoteLineItemTypeSchema = z.enum(QUOTE_LINE_ITEM_TYPES, {
 
 export const quoteDiscountTypeSchema = z.enum(QUOTE_DISCOUNT_TYPES, {
     error: `Discount type must be one of: ${QUOTE_DISCOUNT_TYPES.join(", ")}.`,
+});
+
+export const quoteHistoryEventTypeSchema = z.enum(QUOTE_HISTORY_EVENT_TYPES, {
+    error: `History event type must be one of: ${QUOTE_HISTORY_EVENT_TYPES.join(", ")}.`,
 });
 
 // ==========================================
@@ -211,7 +229,8 @@ export const createQuoteLineItemSchema = z
             .string()
             .trim()
             .min(1, "Line item name must not be empty.")
-            .max(200, "Line item name cannot exceed 200 characters."),
+            .max(200, "Line item name cannot exceed 200 characters.")
+            .optional(),
 
         description: z
             .string()
@@ -494,4 +513,25 @@ export const listQuotesQuerySchema = z.object({
 
 export type ListQuotesQueryInputSchemaType = z.infer<
     typeof listQuotesQuerySchema
+>;
+
+export const quoteHistoryQuerySchema = z.object({
+    eventType: z
+        .union([
+            quoteHistoryEventTypeSchema,
+            z.array(quoteHistoryEventTypeSchema),
+            z.string().transform((val) => {
+                const parts = val.split(",").map((s) => s.trim().toUpperCase());
+                return parts.length === 1 ? parts[0] : parts;
+            }),
+        ])
+        .optional(),
+
+    sortOrder: z.enum(["asc", "desc"]).default("desc").optional(),
+    page: z.coerce.number().int().min(1).default(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
+});
+
+export type QuoteHistoryQueryInputSchemaType = z.infer<
+    typeof quoteHistoryQuerySchema
 >;
