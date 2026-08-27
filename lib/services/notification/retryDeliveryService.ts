@@ -14,22 +14,23 @@ import { NotificationDeliveryNotFoundError } from "./notificationErrors";
 import { NotificationDeliveryResult } from "./notification.types";
 
 export interface RetryBackoffConfig {
-    baseDelaySeconds?: number; // Default: 30s
+    baseDelaySeconds?: number; // Default: 10s (locked spec Section 10.2)
     backoffMultiplier?: number; // Default: 2
     maxDelaySeconds?: number; // Default: 3600s (1 hour)
-    jitterRatio?: number; // Default: 0.1 (+/- 10%)
+    maxJitterSeconds?: number; // Default: 5s (additive uniform(0, 5s))
+    jitterRatio?: number; // Legacy/custom ratio override if explicitly provided
 }
 
-const DEFAULT_CONFIG: Required<RetryBackoffConfig> = {
-    baseDelaySeconds: 30,
+const DEFAULT_CONFIG: Required<Omit<RetryBackoffConfig, "jitterRatio">> = {
+    baseDelaySeconds: 10,
     backoffMultiplier: 2,
     maxDelaySeconds: 3600,
-    jitterRatio: 0.1,
+    maxJitterSeconds: 5,
 };
 
 /**
- * Computes deterministic exponential backoff delay in seconds with jitter.
- * Formula: min(maxDelay, baseDelay * (multiplier ** (attemptNumber - 1))) * (1 +/- jitter)
+ * Computes deterministic exponential backoff delay in seconds with additive jitter per Section 10.2.
+ * Formula: min(maxDelay, baseDelay * (multiplier ** (attemptNumber - 1))) + uniform(0, maxJitter)
  *
  * @param attemptCount Current attempt count (e.g. 1 after 1st failure)
  * @param config Optional tuning for base delay, multiplier, max delay, and jitter
@@ -41,15 +42,19 @@ export function calculateExponentialBackoff(
     const base = config.baseDelaySeconds ?? DEFAULT_CONFIG.baseDelaySeconds;
     const mult = config.backoffMultiplier ?? DEFAULT_CONFIG.backoffMultiplier;
     const max = config.maxDelaySeconds ?? DEFAULT_CONFIG.maxDelaySeconds;
-    const jitter = config.jitterRatio ?? DEFAULT_CONFIG.jitterRatio;
+    const maxJitter = config.maxJitterSeconds ?? DEFAULT_CONFIG.maxJitterSeconds;
 
     const exponent = Math.max(0, attemptCount - 1);
     const rawDelay = base * Math.pow(mult, exponent);
     const cappedDelay = Math.min(rawDelay, max);
 
-    // Apply deterministic or bounded random jitter
-    const jitterMultiplier = 1 + (Math.random() * 2 - 1) * jitter;
-    return Math.max(1, Math.round(cappedDelay * jitterMultiplier));
+    if (config.jitterRatio !== undefined) {
+        const jitterMultiplier = 1 + (Math.random() * 2 - 1) * config.jitterRatio;
+        return Math.max(1, Math.round(cappedDelay * jitterMultiplier));
+    }
+
+    const jitter = Math.random() * maxJitter;
+    return Math.max(1, Math.round(cappedDelay + jitter));
 }
 
 /**

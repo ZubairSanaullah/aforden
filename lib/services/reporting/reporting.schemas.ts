@@ -1,0 +1,182 @@
+import { z } from "zod";
+import type {
+  DateBucketGranularity,
+  DateRangePreset,
+  DimensionKey,
+  FilterKey,
+  MetricKey,
+  ReportKey,
+} from "./reporting.types";
+
+export const DATE_RANGE_PRESETS = [
+  "TODAY",
+  "YESTERDAY",
+  "THIS_WEEK",
+  "LAST_WEEK",
+  "THIS_MONTH",
+  "LAST_MONTH",
+  "THIS_QUARTER",
+  "LAST_QUARTER",
+  "THIS_YEAR",
+  "LAST_YEAR",
+  "LAST_7_DAYS",
+  "LAST_30_DAYS",
+  "LAST_90_DAYS",
+  "LAST_12_MONTHS",
+] as const satisfies readonly DateRangePreset[];
+
+export const DATE_BUCKET_GRANULARITIES = [
+  "DAY",
+  "WEEK",
+  "MONTH",
+  "QUARTER",
+  "YEAR",
+] as const satisfies readonly DateBucketGranularity[];
+
+export const METRIC_KEYS = [
+  "workOrders.createdCount",
+  "workOrders.completedCount",
+  "workOrders.cancelledCount",
+  "workOrders.openBacklogCount",
+  "workOrders.completionRate",
+  "workOrders.avgCycleTimeMinutes",
+  "schedule.appointmentsScheduledCount",
+  "schedule.appointmentsCompletedCount",
+  "schedule.appointmentsCancelledCount",
+  "schedule.dispatchedCount",
+  "schedule.avgDispatchLatencyMinutes",
+  "schedule.avgAcknowledgeLatencyMinutes",
+  "technicians.completedWorkOrderCount",
+  "technicians.cancelledWorkOrderCount",
+  "technicians.avgJobDurationMinutes",
+  "technicians.onTimeArrivalRate",
+  "technicians.reassignmentAwayCount",
+  "technicians.onSiteMinutes",
+  "technicians.travelMinutes",
+  "technicians.trackedMinutes",
+  "technicians.onSiteShareOfTrackedTime",
+  "technicians.utilizationRate",
+  "technicians.firstTimeFixRate",
+  "quotes.createdCount",
+  "quotes.approvedCount",
+  "quotes.rejectedCount",
+  "quotes.approvedTotal",
+  "quotes.pipelineTotal",
+  "quotes.winRate",
+  "invoices.invoicedRevenue",
+  "invoices.issuedCount",
+  "invoices.voidedCount",
+  "invoices.voidedTotal",
+  "invoices.outstandingBalance",
+  "invoices.overdueBalance",
+  "invoices.countByStatus",
+  "invoices.avgDaysToPayment",
+  "invoices.collectionRate",
+  "payments.collectedRevenue",
+  "payments.collectedCount",
+  "inventory.partsConsumedCost",
+  "inventory.partsConsumedQuantity",
+  "inventory.quantityOnHand",
+  "inventory.belowMinimumStockPartCount",
+  "inventory.stockValue",
+  "inventory.stockMovementCount",
+  "assets.count",
+  "assets.countByStatus",
+  "assets.warrantyExpiringCount",
+  "assets.serviceEventCount",
+  "assets.avgServicesPerAsset",
+  "assets.mtbfHours",
+  "assets.mttrHours",
+  "assets.uptimePercentage",
+  "assets.downtimeMinutes",
+  "customers.newCount",
+  "customers.activeCount",
+  "customers.countByStatus",
+  "customers.workOrdersPerCustomer",
+  "customers.lifetimeInvoicedRevenue",
+  "customers.repeatCustomerRate",
+  "customers.churnRate",
+  "customers.retentionRate",
+] as const satisfies readonly MetricKey[];
+
+export const DIMENSION_KEYS = [
+  "time.day",
+  "time.week",
+  "time.month",
+  "time.quarter",
+  "time.year",
+  "customer",
+  "technician",
+  "workType",
+  "serviceCatalog",
+  "workOrderStatus",
+  "workOrderPriority",
+  "appointmentStatus",
+  "dispatchStatus",
+  "quoteStatus",
+  "invoiceStatus",
+  "paymentMethod",
+  "assetStatus",
+  "assetCategory",
+  "part",
+  "inventoryLocation",
+  "timeEntryType",
+] as const satisfies readonly DimensionKey[];
+
+export const REPORT_KEYS = [
+  "operational.workOrderVolume",
+  "operational.workOrderThroughput",
+  "scheduling.dispatchPerformance",
+  "technician.productivity",
+  "technician.selfScorecard",
+  "financial.revenueSummary",
+  "financial.arAging",
+  "financial.quotePipeline",
+  "financial.quoteConversion",
+  "inventory.partsConsumption",
+  "asset.summary",
+  "customer.activitySummary",
+] as const satisfies readonly ReportKey[];
+
+export const FILTER_KEYS = [
+  "customerId",
+  "technicianId",
+  "workTypeId",
+  "serviceCatalogId",
+  "workOrderStatus",
+  "workOrderPriority",
+  "appointmentStatus",
+  "dispatchStatus",
+  "quoteStatus",
+  "invoiceStatus",
+  "paymentMethod",
+  "assetStatus",
+  "assetCategoryId",
+  "partId",
+  "inventoryLocationId",
+  "timeEntryType",
+] as const satisfies readonly FilterKey[];
+
+export const dateRangePresetSchema = z.enum(DATE_RANGE_PRESETS);
+export const dateBucketGranularitySchema = z.enum(DATE_BUCKET_GRANULARITIES);
+export const metricKeySchema = z.enum(METRIC_KEYS);
+export const dimensionKeySchema = z.enum(DIMENSION_KEYS);
+export const reportKeySchema = z.enum(REPORT_KEYS);
+export const filterKeySchema = z.enum(FILTER_KEYS);
+
+const LOCAL_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+export const reportQueryParamsSchema = z.object({
+  from: z.string().regex(LOCAL_DATE_REGEX, "Must be YYYY-MM-DD format").optional(),
+  to: z.string().regex(LOCAL_DATE_REGEX, "Must be YYYY-MM-DD format").optional(),
+  preset: dateRangePresetSchema.optional(),
+  granularity: dateBucketGranularitySchema.optional(),
+  metrics: z.union([metricKeySchema, z.array(metricKeySchema)]).optional(),
+  dimensions: z.union([dimensionKeySchema, z.array(dimensionKeySchema)]).optional(),
+  page: z.coerce.number().int().min(1, "Page must be an integer >= 1").optional(),
+  limit: z.coerce.number().int().min(1, "Limit must be an integer >= 1").max(1000, "Limit cannot exceed 1000").optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
+}).passthrough();
+
+export type ReportQueryParams = z.infer<typeof reportQueryParamsSchema>;

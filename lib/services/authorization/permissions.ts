@@ -88,6 +88,12 @@ export const PERMISSIONS = {
     PAYMENTS_VIEW: "payments.view",
     PAYMENTS_CREATE: "payments.create",
     PAYMENTS_VOID: "payments.void",
+
+    // Reporting & Analytics permissions (Phase 1.14)
+    REPORTS_VIEW_OPERATIONAL: "reports.view_operational",
+    REPORTS_VIEW_FINANCIAL: "reports.view_financial",
+    REPORTS_VIEW_TECHNICIAN: "reports.view_technician",
+    REPORTS_EXPORT: "reports.export",
 } as const;
 
 export type Permission =

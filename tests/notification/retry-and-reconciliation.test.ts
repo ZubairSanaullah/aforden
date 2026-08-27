@@ -20,64 +20,56 @@ import {
 describe("Phase 1.13.10 — Retry Engine & Reconciliation Worker", () => {
     const WS_ID = "ws_test_retry_10";
 
-    describe("1. Exponential Backoff Calculation", () => {
-        it("computes base delay for first retry (attempt 1)", () => {
+    describe("1. Exponential Backoff Calculation (Section 10.2 Locked Spec)", () => {
+        it("computes default base delay for first retry (attempt 1) per locked spec (10s)", () => {
             const delay = calculateExponentialBackoff(1, {
-                baseDelaySeconds: 30,
-                backoffMultiplier: 2,
-                maxDelaySeconds: 3600,
-                jitterRatio: 0, // Zero jitter for deterministic check
+                maxJitterSeconds: 0, // Zero jitter for deterministic base check
             });
-            expect(delay).toBe(30);
+            expect(delay).toBe(10);
         });
 
-        it("scales exponentially with attempt count", () => {
-            const delay2 = calculateExponentialBackoff(2, {
-                baseDelaySeconds: 30,
-                backoffMultiplier: 2,
-                maxDelaySeconds: 3600,
-                jitterRatio: 0,
-            });
-            expect(delay2).toBe(60);
+        it("scales exponentially per locked formula: min(3600, 10 * 2^(attempt-1))", () => {
+            const delay2 = calculateExponentialBackoff(2, { maxJitterSeconds: 0 });
+            expect(delay2).toBe(20);
 
-            const delay3 = calculateExponentialBackoff(3, {
-                baseDelaySeconds: 30,
-                backoffMultiplier: 2,
-                maxDelaySeconds: 3600,
-                jitterRatio: 0,
-            });
-            expect(delay3).toBe(120);
+            const delay3 = calculateExponentialBackoff(3, { maxJitterSeconds: 0 });
+            expect(delay3).toBe(40);
 
-            const delay4 = calculateExponentialBackoff(4, {
-                baseDelaySeconds: 30,
-                backoffMultiplier: 2,
-                maxDelaySeconds: 3600,
-                jitterRatio: 0,
-            });
-            expect(delay4).toBe(240);
+            const delay4 = calculateExponentialBackoff(4, { maxJitterSeconds: 0 });
+            expect(delay4).toBe(80);
+
+            const delay5 = calculateExponentialBackoff(5, { maxJitterSeconds: 0 });
+            expect(delay5).toBe(160);
         });
 
-        it("caps maximum delay at maxDelaySeconds ceiling", () => {
+        it("caps maximum delay at maxDelaySeconds ceiling (default 3600s)", () => {
             const delay10 = calculateExponentialBackoff(10, {
-                baseDelaySeconds: 30,
-                backoffMultiplier: 2,
                 maxDelaySeconds: 300,
-                jitterRatio: 0,
+                maxJitterSeconds: 0,
             });
             expect(delay10).toBe(300);
         });
 
-        it("applies jitter bounds within expected ratio", () => {
+        it("applies additive uniform jitter uniform(0, 5s) within expected bounds", () => {
             for (let i = 0; i < 20; i++) {
-                const delay = calculateExponentialBackoff(2, {
-                    baseDelaySeconds: 100,
-                    backoffMultiplier: 2,
-                    maxDelaySeconds: 3600,
-                    jitterRatio: 0.1, // +/- 10% -> [180, 220]
-                });
-                expect(delay).toBeGreaterThanOrEqual(180);
-                expect(delay).toBeLessThanOrEqual(220);
+                const delay1 = calculateExponentialBackoff(1); // 10s base + uniform(0, 5s)
+                expect(delay1).toBeGreaterThanOrEqual(10);
+                expect(delay1).toBeLessThanOrEqual(15);
+
+                const delay2 = calculateExponentialBackoff(2); // 20s base + uniform(0, 5s)
+                expect(delay2).toBeGreaterThanOrEqual(20);
+                expect(delay2).toBeLessThanOrEqual(25);
             }
+        });
+
+        it("supports custom ratio overrides if provided", () => {
+            const delay = calculateExponentialBackoff(2, {
+                baseDelaySeconds: 100,
+                backoffMultiplier: 2,
+                jitterRatio: 0.1,
+            });
+            expect(delay).toBeGreaterThanOrEqual(180);
+            expect(delay).toBeLessThanOrEqual(220);
         });
     });
 
@@ -391,6 +383,123 @@ describe("Phase 1.13.10 — Retry Engine & Reconciliation Worker", () => {
             expect(result.failedCount).toBe(1);
             expect(updatedOutbox[0].status).toBe(NotificationOutboxStatus.PENDING);
             expect(updatedOutbox[1].status).toBe(NotificationOutboxStatus.FAILED);
+        });
+    });
+
+    describe("5. No-Duplicate-Delivery & In-Place Reconciliation Invariant", () => {
+        it("reconcileStuckDeliveries resets EXISTING row in-place and never creates new NotificationDelivery rows", async () => {
+            const staleDate = new Date(Date.now() - 20 * 60 * 1000);
+            const originalIdempotencyKey = "sha256_idemp_original_12345";
+            const originalDeliveryId = "del_stuck_existing_99";
+
+            const existingDelivery = {
+                id: originalDeliveryId,
+                workspaceId: WS_ID,
+                notificationId: "notif_orig_1",
+                channel: NotificationChannel.EMAIL,
+                recipientType: RecipientType.CUSTOMER_CONTACT,
+                destination: "customer@example.com",
+                status: NotificationDeliveryStatus.PROCESSING,
+                attemptCount: 1,
+                maxAttempts: 5,
+                idempotencyKey: originalIdempotencyKey,
+                lastAttemptAt: staleDate,
+            };
+
+            const mockCreate = vi.fn();
+            const mockUpdate = vi.fn().mockImplementation(({ where, data }) => ({
+                ...existingDelivery,
+                ...data,
+            }));
+
+            const mockPrisma: any = {
+                notificationDelivery: {
+                    findMany: vi.fn().mockResolvedValue([existingDelivery]),
+                    update: mockUpdate,
+                    create: mockCreate,
+                },
+                notificationLog: {
+                    create: vi.fn().mockResolvedValue({ id: "log_rec_dedup" }),
+                },
+            };
+
+            const result = await reconcileStuckDeliveries(mockPrisma, {
+                staleThresholdMinutes: 10,
+            });
+
+            expect(result.recoveredCount).toBe(1);
+            expect(result.reconciledDeliveryIds).toEqual([originalDeliveryId]);
+
+            // VERIFY: NotificationDelivery.create is NEVER called during reconciliation
+            expect(mockCreate).not.toHaveBeenCalled();
+
+            // VERIFY: NotificationDelivery.update is called specifically for the existing row ID
+            expect(mockUpdate).toHaveBeenCalledTimes(1);
+            expect(mockUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: originalDeliveryId },
+                    data: expect.objectContaining({
+                        status: NotificationDeliveryStatus.PENDING_RETRY,
+                    }),
+                }),
+            );
+
+            // Invariant: The idempotencyKey remains bound to the original row
+            expect(existingDelivery.idempotencyKey).toBe(originalIdempotencyKey);
+        });
+
+        it("reconcileStuckOutboxItems resets EXISTING row in-place and never creates new NotificationOutbox rows", async () => {
+            const staleDate = new Date(Date.now() - 20 * 60 * 1000);
+            const originalDedupeKey = "sha256_outbox_dedupe_67890";
+            const originalOutboxId = "outbox_stuck_existing_88";
+
+            const existingOutboxItem = {
+                id: originalOutboxId,
+                workspaceId: WS_ID,
+                eventType: NotificationEventType.WORK_ORDER_ASSIGNED,
+                status: NotificationOutboxStatus.PROCESSING,
+                attemptCount: 1,
+                dedupeKey: originalDedupeKey,
+                createdAt: staleDate,
+            };
+
+            const mockCreate = vi.fn();
+            const mockUpdate = vi.fn().mockImplementation(({ where, data }) => ({
+                ...existingOutboxItem,
+                ...data,
+            }));
+
+            const mockPrisma: any = {
+                notificationOutbox: {
+                    findMany: vi.fn().mockResolvedValue([existingOutboxItem]),
+                    update: mockUpdate,
+                    create: mockCreate,
+                },
+            };
+
+            const result = await reconcileStuckOutboxItems(mockPrisma, {
+                staleThresholdMinutes: 10,
+            });
+
+            expect(result.recoveredCount).toBe(1);
+            expect(result.reconciledOutboxIds).toEqual([originalOutboxId]);
+
+            // VERIFY: NotificationOutbox.create is NEVER called during reconciliation
+            expect(mockCreate).not.toHaveBeenCalled();
+
+            // VERIFY: NotificationOutbox.update is called specifically for the existing row ID
+            expect(mockUpdate).toHaveBeenCalledTimes(1);
+            expect(mockUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: originalOutboxId },
+                    data: expect.objectContaining({
+                        status: NotificationOutboxStatus.PENDING,
+                    }),
+                }),
+            );
+
+            // Invariant: The dedupeKey remains bound to the original row
+            expect(existingOutboxItem.dedupeKey).toBe(originalDedupeKey);
         });
     });
 });

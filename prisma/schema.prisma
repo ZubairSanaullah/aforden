@@ -1024,6 +1024,10 @@ model WorkOrder {
   @@index([priority])
   @@index([workspaceId, status])
   @@index([createdAt])
+  @@index([workspaceId, status, completedAt])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, cancelledAt])
+  @@index([workspaceId, assignedTechnicianId, status])
 }
 
 model Account {
@@ -1281,6 +1285,7 @@ model ScheduleAppointmentHistory {
   @@index([appointmentId])
   @@index([workspaceId, appointmentId, createdAt])
   @@index([eventType])
+  @@index([workspaceId, eventType, createdAt])
 }
 
 model TechnicianTimeEntry {
@@ -1316,6 +1321,8 @@ model TechnicianTimeEntry {
   @@index([workspaceId, technicianProfileId, status])
   @@index([workspaceId, workOrderId])
   @@index([startedAt])
+  @@index([workspaceId, technicianProfileId, startedAt])
+  @@index([workspaceId, entryType, startedAt])
 }
 
 model Part {
@@ -1473,6 +1480,7 @@ model WorkOrderPart {
   @@index([partId])
   @@index([locationId])
   @@index([consumedAt])
+  @@index([workspaceId, consumedAt])
 }
 
 model Quote {
@@ -1522,6 +1530,8 @@ model Quote {
   @@index([workspaceId, status])
   @@index([validUntil])
   @@index([createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, approvedAt])
 }
 
 model QuoteLineItem {
@@ -1644,6 +1654,8 @@ model Invoice {
   @@index([workspaceId, status])
   @@index([dueDate])
   @@index([createdAt])
+  @@index([workspaceId, status, issueDate])
+  @@index([workspaceId, createdAt])
 }
 
 model InvoiceLineItem {
@@ -1727,6 +1739,7 @@ model Payment {
   @@index([status])
   @@index([paymentDate])
   @@index([createdAt])
+  @@index([workspaceId, status, paymentDate])
 }
 
 model InvoiceHistory {
