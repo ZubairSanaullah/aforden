@@ -19,6 +19,29 @@ const mocks = vi.hoisted(() => ({
     technicianProfileFindMany: vi.fn(),
     technicianProfileUpdate: vi.fn(),
     technicianProfileDelete: vi.fn(),
+    technicianProfileCount: vi.fn(),
+    workspaceEntitlementOverrideFindUnique: vi.fn(),
+    subscriptionFindFirst: vi.fn(),
+    $transaction: vi.fn(async (cb: any) => cb({
+        technicianProfile: {
+            create: mocks.technicianProfileCreate,
+            findUnique: mocks.technicianProfileFindUnique,
+            findFirst: mocks.technicianProfileFindFirst,
+            findMany: mocks.technicianProfileFindMany,
+            update: mocks.technicianProfileUpdate,
+            delete: mocks.technicianProfileDelete,
+            count: mocks.technicianProfileCount,
+        },
+        workspace: {
+            findUnique: mocks.workspaceFindUnique,
+        },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
+        },
+    })),
 }));
 
 vi.mock("@/auth", () => ({
@@ -53,7 +76,15 @@ vi.mock("@/lib/prisma", () => ({
             findMany: mocks.technicianProfileFindMany,
             update: mocks.technicianProfileUpdate,
             delete: mocks.technicianProfileDelete,
+            count: mocks.technicianProfileCount,
         },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
+        },
+        $transaction: mocks.$transaction,
     },
 }));
 

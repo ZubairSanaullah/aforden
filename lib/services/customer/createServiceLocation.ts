@@ -10,6 +10,7 @@ import {
     ServiceLocationPrimaryExistsError,
 } from "./customerErrors";
 import { Prisma, type ServiceLocation } from "@/generated/prisma/client";
+import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
 
 /**
  * Creates a ServiceLocation for a Customer in a workspace.
@@ -75,30 +76,41 @@ export async function createServiceLocation(
     }
 
     // --- 7. Execute Creation with Concurrency Collision Handling ---
+    const runTx =
+        typeof prisma.$transaction === "function"
+            ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+            : async (cb: (tx: any) => Promise<any>) => cb(prisma);
+
     try {
-        const location = await prisma.serviceLocation.create({
-            data: {
-                customerId,
-                name: validated.name,
-                addressLine1: validated.addressLine1,
-                addressLine2: validated.addressLine2 ?? null,
-                city: validated.city,
-                state: validated.state ?? null,
-                postalCode: validated.postalCode ?? null,
-                country: validated.country,
-                latitude:
-                    validated.latitude !== undefined &&
-                    validated.latitude !== null
-                        ? new Prisma.Decimal(validated.latitude)
-                        : null,
-                longitude:
-                    validated.longitude !== undefined &&
-                    validated.longitude !== null
-                        ? new Prisma.Decimal(validated.longitude)
-                        : null,
-                notes: validated.notes ?? null,
-                isPrimary: validated.isPrimary ?? false,
-            },
+        const location = await runTx(async (tx) => {
+            // Phase 1.15.5: Assert MAX_SERVICE_LOCATIONS quota inside the transaction so
+            // the count query and insertion are atomic, preventing TOCTOU races.
+            await assertEntitlement(tx, workspaceId, "MAX_SERVICE_LOCATIONS");
+
+            return tx.serviceLocation.create({
+                data: {
+                    customerId,
+                    name: validated.name,
+                    addressLine1: validated.addressLine1,
+                    addressLine2: validated.addressLine2 ?? null,
+                    city: validated.city,
+                    state: validated.state ?? null,
+                    postalCode: validated.postalCode ?? null,
+                    country: validated.country,
+                    latitude:
+                        validated.latitude !== undefined &&
+                        validated.latitude !== null
+                            ? new Prisma.Decimal(validated.latitude)
+                            : null,
+                    longitude:
+                        validated.longitude !== undefined &&
+                        validated.longitude !== null
+                            ? new Prisma.Decimal(validated.longitude)
+                            : null,
+                    notes: validated.notes ?? null,
+                    isPrimary: validated.isPrimary ?? false,
+                },
+            });
         });
 
         return location;
@@ -106,6 +118,11 @@ export async function createServiceLocation(
         // Prisma code P2002: Unique constraint violation (e.g. concurrent primary location creation)
         if (error?.code === "P2002") {
             throw new ServiceLocationPrimaryExistsError();
+        }
+
+        // Re-throw domain errors from assertEntitlement (QuotaExceededError, etc.) as-is
+        if (error?.code === "QUOTA_EXCEEDED" || error?.statusCode) {
+            throw error;
         }
 
         throw new ServiceLocationCreationError(

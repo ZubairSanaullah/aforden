@@ -23,6 +23,7 @@ import {
     emitNotificationEvent,
     NotificationEventType,
 } from "@/lib/services/notification";
+import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
 
 const MAX_NUMBER_GENERATION_ATTEMPTS = 3;
 
@@ -151,6 +152,10 @@ export async function createWorkOrder(
                     : async (cb: (tx: any) => Promise<any>) => cb(prisma));
 
             const created = await runTx(async (tx) => {
+                // Phase 1.15.5: Assert MAX_WORK_ORDERS_PER_MONTH quota inside the
+                // transaction so the count and insert are atomic, preventing TOCTOU races.
+                await assertEntitlement(tx, workspaceId, "MAX_WORK_ORDERS_PER_MONTH");
+
                 // Compute next sequential reference number inside the transaction
                 const latest = await tx.workOrder.findFirst({
                     where: {

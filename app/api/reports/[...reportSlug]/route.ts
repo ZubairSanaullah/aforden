@@ -9,6 +9,27 @@ import {
   resolveWorkspaceId,
 } from "@/lib/utils/reportingApiError";
 import type { ReportKey } from "@/lib/services/reporting/reporting.types";
+import { prisma } from "@/lib/prisma";
+import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
+import { requireWorkspaceAuthorization } from "@/lib/services/authorization/workspaceAuthorization";
+import { getReportDefinition } from "@/lib/services/reporting/reportRegistry";
+import { assertPermission } from "@/lib/services/authorization/permissionService";
+
+/**
+ * Report keys that require the FEATURE_ADVANCED_REPORTING entitlement.
+ * Covers: financial analytics (revenue, AR aging, quote conversion/pipeline) and
+ * technician efficiency reports (productivity scorecard, self-scorecard).
+ * Operational, scheduling, asset, inventory, and customer activity reports
+ * remain available to all non-terminal subscriptions and free-tier workspaces.
+ */
+const ADVANCED_REPORT_KEYS = new Set<ReportKey>([
+  "financial.revenueSummary",
+  "financial.arAging",
+  "financial.quoteConversion",
+  "financial.quotePipeline",
+  "technician.productivity",
+  "technician.selfScorecard",
+] as ReportKey[]);
 
 /**
  * Maps dynamic URL slug segments (kebab-case or dot-notation) to canonical closed ReportKey.
@@ -82,13 +103,25 @@ export async function GET(
       context.params instanceof Promise ? await context.params : context.params;
     const reportKey = resolveSlugToReportKey(resolvedParams.reportSlug);
 
-    // 3. Extract and Validate Query Parameters
+    // 3. Authenticate and Authorize Workspace Access & Role RBAC
+    const auth = await requireWorkspaceAuthorization(workspaceId);
+    const definition = getReportDefinition(reportKey);
+    assertPermission(auth.membership.role, definition.requiredPermission);
+
+    // 4. Extract and Validate Query Parameters
     const queryParams = extractQueryParams(request);
 
-    // 4. Execute live report aggregation via composition engine
-    const reportResponse = await composeReport(reportKey, workspaceId, queryParams);
+    // 5. Phase 1.15.5: Feature gate — assert FEATURE_ADVANCED_REPORTING for gated reports.
+    // Plan entitlement check executes after user RBAC authorization, ensuring unauthorized
+    // roles receive 403 FORBIDDEN without probing tenant subscription tier status.
+    if (ADVANCED_REPORT_KEYS.has(reportKey)) {
+      await assertEntitlement(prisma, workspaceId, "FEATURE_ADVANCED_REPORTING");
+    }
 
-    // 5. Handle CSV Export Response
+    // 6. Execute live report aggregation via composition engine
+    const reportResponse = await composeReport(reportKey, workspaceId, queryParams, auth);
+
+    // 6. Handle CSV Export Response
     const wantsCsv =
       queryParams.format === "csv" ||
       request.headers.get("accept")?.includes("text/csv");
@@ -106,7 +139,7 @@ export async function GET(
       });
     }
 
-    // 6. Return Standard JSON Response
+    // 7. Return Standard JSON Response
     return NextResponse.json(
       {
         success: true,

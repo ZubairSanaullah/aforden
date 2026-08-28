@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
     workOrderCreate: vi.fn(),
     workOrderUpdate: vi.fn(),
     workOrderHistoryCreate: vi.fn(),
+    workspaceEntitlementOverrideFindUnique: vi.fn(),
+    subscriptionFindFirst: vi.fn(),
     transaction: vi.fn(),
 }));
 
@@ -58,6 +60,12 @@ vi.mock("@/lib/prisma", () => ({
         },
         workOrderHistory: {
             create: mocks.workOrderHistoryCreate,
+        },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
         },
         $transaction: mocks.transaction,
     },
@@ -417,6 +425,16 @@ describe("Phase 1.7.7 — WorkOrder <-> Asset Integration Tests", () => {
                     findFirst: mocks.workOrderFindFirst,
                     create: mocks.workOrderCreate,
                     update: mocks.workOrderUpdate,
+                    count: mocks.workOrderCount,
+                },
+                workspace: {
+                    findUnique: mocks.workspaceFindUnique,
+                },
+                workspaceEntitlementOverride: {
+                    findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+                },
+                subscription: {
+                    findFirst: mocks.subscriptionFindFirst,
                 },
                 workOrderHistory: {
                     create: mocks.workOrderHistoryCreate,

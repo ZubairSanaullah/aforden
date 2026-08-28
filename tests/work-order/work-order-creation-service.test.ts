@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
     workTypeFindFirst: vi.fn(),
     workOrderFindFirst: vi.fn(),
     workOrderCreate: vi.fn(),
+    workOrderCount: vi.fn(),
+    workspaceEntitlementOverrideFindUnique: vi.fn(),
+    subscriptionFindFirst: vi.fn(),
     transaction: vi.fn(),
 }));
 
@@ -40,6 +43,13 @@ vi.mock("@/lib/prisma", () => ({
         workOrder: {
             findFirst: mocks.workOrderFindFirst,
             create: mocks.workOrderCreate,
+            count: mocks.workOrderCount,
+        },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
         },
         $transaction: mocks.transaction,
     },
@@ -323,6 +333,16 @@ describe("Phase 1.6.4 — WorkOrder Creation Service Layer", () => {
                 workOrder: {
                     findFirst: mocks.workOrderFindFirst,
                     create: mocks.workOrderCreate,
+                    count: mocks.workOrderCount,
+                },
+                workspace: {
+                    findUnique: mocks.workspaceFindUnique,
+                },
+                workspaceEntitlementOverride: {
+                    findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+                },
+                subscription: {
+                    findFirst: mocks.subscriptionFindFirst,
                 },
             };
             return await callback(tx);

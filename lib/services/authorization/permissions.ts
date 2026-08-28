@@ -94,7 +94,13 @@ export const PERMISSIONS = {
     REPORTS_VIEW_FINANCIAL: "reports.view_financial",
     REPORTS_VIEW_TECHNICIAN: "reports.view_technician",
     REPORTS_EXPORT: "reports.export",
+
+    // Automation & Workflow permissions (Phase 1.16)
+    AUTOMATIONS_VIEW: "automations.view",
+    AUTOMATIONS_MANAGE: "automations.manage",
+    AUTOMATIONS_RUN: "automations.run",
 } as const;
+
 
 export type Permission =
     (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

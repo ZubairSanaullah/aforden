@@ -79,6 +79,7 @@ describe("Phase 1.13.9 — Operational Domain Event Integrations & Invariants", 
                 },
                 workOrder: {
                     findFirst: vi.fn().mockResolvedValue({ workOrderNumber: "WO-2026-000001" }),
+                    count: vi.fn().mockResolvedValue(0),
                     create: vi.fn().mockResolvedValue({
                         id: "wo_1",
                         workspaceId: WS_ID,
@@ -93,6 +94,15 @@ describe("Phase 1.13.9 — Operational Domain Event Integrations & Invariants", 
                         location: { name: "HQ", addressLine1: "123 Main" },
                         workType: { name: "HVAC Repair", code: "HVAC" },
                     }),
+                },
+                workspace: {
+                    findUnique: vi.fn().mockResolvedValue({ timezone: "America/New_York" }),
+                },
+                workspaceEntitlementOverride: {
+                    findUnique: vi.fn().mockResolvedValue(null),
+                },
+                subscription: {
+                    findFirst: vi.fn().mockResolvedValue(null),
                 },
                 workOrderHistory: { create: vi.fn().mockResolvedValue({ id: "woh_1" }) },
                 notificationOutbox: {
@@ -543,6 +553,7 @@ describe("Phase 1.13.9 — Operational Domain Event Integrations & Invariants", 
                 },
                 workOrder: {
                     findFirst: vi.fn().mockResolvedValue(null),
+                    count: vi.fn().mockResolvedValue(0),
                     create: vi.fn().mockImplementation(async () => {
                         workOrderPersisted = true;
                         return {
@@ -560,6 +571,15 @@ describe("Phase 1.13.9 — Operational Domain Event Integrations & Invariants", 
                             workType: { name: "HVAC" },
                         };
                     }),
+                },
+                workspace: {
+                    findUnique: vi.fn().mockResolvedValue({ timezone: "America/New_York" }),
+                },
+                workspaceEntitlementOverride: {
+                    findUnique: vi.fn().mockResolvedValue(null),
+                },
+                subscription: {
+                    findFirst: vi.fn().mockResolvedValue(null),
                 },
                 workOrderHistory: { create: vi.fn().mockResolvedValue({ id: "woh_1" }) },
                 notificationOutbox: {

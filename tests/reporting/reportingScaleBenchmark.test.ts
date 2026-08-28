@@ -246,15 +246,14 @@ describe("Phase 1.14.10 — High-Scale Benchmarks & Memory Profile", () => {
     console.log(
       `[Benchmark: customer.activitySummary @ 15,000 customers] Execution: ${executionMs.toFixed(2)}ms | DB Queries: ${customerQueries + woQueries + invoiceQueries}`,
     );
-  });
-
+  });  // =========================================================================
+  // Benchmark 3: technician.productivity at 1,000 Technicians & 20,000 Time Entries (ROWS Mode)
   // =========================================================================
-  // Benchmark 3: technician.productivity at 1,000 Technicians & 20,000 Time Entries
-  // =========================================================================
-  it("benchmarks technician.productivity at 1,000 technicians and 20,000 time entries", async () => {
+  it("benchmarks technician.productivity at 1,000 technicians and 20,000 time entries in ROWS mode", async () => {
     const TECH_COUNT = 1_000;
+    const WO_COMPLETED_COUNT = 10_000;
     const ENTRY_COUNT = 20_000;
-    const APPOINTMENT_COUNT = 15_000;
+    const REASSIGNMENT_COUNT = 1_000;
 
     const mockTechProfiles = Array.from({ length: TECH_COUNT }, (_, i) => ({
       id: `tech_${String(i + 1).padStart(4, "0")}`,
@@ -262,65 +261,125 @@ describe("Phase 1.14.10 — High-Scale Benchmarks & Memory Profile", () => {
         workspaceId: mockWorkspaceId,
         firstName: `TechFirstName${i + 1}`,
         lastName: `TechLastName${i + 1}`,
+        displayName: `Tech ${i + 1}`,
       },
     }));
 
-    const mockTimeEntries = Array.from({ length: ENTRY_COUNT }, (_, i) => ({
-      id: `te_${i + 1}`,
-      technicianId: `tech_${String((i % TECH_COUNT) + 1).padStart(4, "0")}`,
-      entryType: i % 2 === 0 ? "ON_SITE" : "TRAVEL",
-      startTime: new Date("2026-08-10T08:00:00Z"),
-      endTime: new Date("2026-08-10T10:00:00Z"),
-      durationMinutes: 120,
-    }));
-
-    const mockAppointments = Array.from({ length: APPOINTMENT_COUNT }, (_, i) => ({
-      id: `apt_${i + 1}`,
-      technicianId: `tech_${String((i % TECH_COUNT) + 1).padStart(4, "0")}`,
-      status: "COMPLETED",
-      scheduledStart: new Date("2026-08-10T08:00:00Z"),
-      history: [
+    const mockCompletedWOs = Array.from({ length: WO_COMPLETED_COUNT }, (_, i) => ({
+      id: `wo_comp_${i + 1}`,
+      assignedTechnicianId: `tech_${String((i % TECH_COUNT) + 1).padStart(4, "0")}`,
+      startedAt: new Date("2026-08-10T08:00:00Z"),
+      completedAt: new Date("2026-08-10T10:00:00Z"),
+      technicianTimeEntries: [
         {
-          eventType: "COMPLETED",
-          createdAt: new Date("2026-08-10T10:00:00Z"),
+          durationMinutes: 120,
+          startedAt: new Date("2026-08-10T08:00:00Z"),
+          endedAt: new Date("2026-08-10T10:00:00Z"),
         },
       ],
     }));
 
+    const mockTimeEntries = Array.from({ length: ENTRY_COUNT }, (_, i) => ({
+      id: `te_${i + 1}`,
+      technicianProfileId: `tech_${String((i % TECH_COUNT) + 1).padStart(4, "0")}`,
+      entryType: i % 2 === 0 ? "ON_SITE" : "TRAVEL",
+      startTime: new Date("2026-08-10T08:00:00Z"),
+      endTime: new Date("2026-08-10T10:00:00Z"),
+      startedAt: new Date("2026-08-10T08:00:00Z"),
+      endedAt: new Date("2026-08-10T10:00:00Z"),
+      durationMinutes: 120,
+      status: "COMPLETED",
+    }));
+
+    const mockReassignments = Array.from({ length: REASSIGNMENT_COUNT }, (_, i) => ({
+      oldValue: `tech_${String((i % TECH_COUNT) + 1).padStart(4, "0")}`,
+      newValue: `tech_${String(((i + 1) % TECH_COUNT) + 1).padStart(4, "0")}`,
+    }));
+
+    let woQueries = 0;
+    let timeEntryQueries = 0;
+    let historyQueries = 0;
+    let profileQueries = 0;
+
     const mockDb: UnscopedReportDb = {
       technicianProfile: {
-        findMany: vi.fn().mockResolvedValue(mockTechProfiles),
+        findMany: vi.fn().mockImplementation(async (args?: any) => {
+          profileQueries++;
+          if (args?.where?.id?.in) {
+            const inSet = new Set(args.where.id.in);
+            return mockTechProfiles.filter((p) => inSet.has(p.id));
+          }
+          return mockTechProfiles;
+        }),
       } as any,
       technicianTimeEntry: {
-        findMany: vi.fn().mockResolvedValue(mockTimeEntries),
+        findMany: vi.fn().mockImplementation(async () => {
+          timeEntryQueries++;
+          return mockTimeEntries;
+        }),
       } as any,
-      scheduleAppointment: {
-        findMany: vi.fn().mockResolvedValue(mockAppointments),
+      workOrder: {
+        findMany: vi.fn().mockImplementation(async () => {
+          woQueries++;
+          return mockCompletedWOs;
+        }),
+        groupBy: vi.fn().mockImplementation(async () => {
+          return Array.from({ length: TECH_COUNT }, (_, i) => ({
+            assignedTechnicianId: `tech_${String(i + 1).padStart(4, "0")}`,
+            _count: { _all: 2 },
+          }));
+        }),
+      } as any,
+      workOrderHistory: {
+        findMany: vi.fn().mockImplementation(async () => {
+          historyQueries++;
+          return mockReassignments;
+        }),
       } as any,
     };
 
+    const memBefore = process.memoryUsage().heapUsed;
     const t0 = performance.now();
-    // SCALARS mode — pass dimensions:[] to override the per-report default of ["technician"]
-    const resScalars = await composeReport(
+
+    // ROWS mode — requesting grouped by technician with page 1, limit 20
+    const resRows = (await composeReport(
       "technician.productivity",
       mockWorkspaceId,
       {
         preset: "THIS_MONTH",
-        dimensions: [],
-        metrics: ["technicians.completedWorkOrderCount"],
+        dimensions: ["technician"],
+        page: 1,
+        limit: 20,
       },
       mockAuthContext,
       mockDb,
-    );
+    )) as ReportRowsReadModel;
+
     const t1 = performance.now();
+    const memAfter = process.memoryUsage().heapUsed;
 
     const executionMs = t1 - t0;
+    const heapDeltaMb = (memAfter - memBefore) / (1024 * 1024);
 
-    // SCALARS shape confirms no dimension grouping path
-    expect(resScalars.meta.shape).toBe("SCALARS");
+    // ROWS shape confirms dimension grouping path
+    expect(resRows.meta.shape).toBe("ROWS");
+    expect(resRows.meta.truncated).toBe(false);
+    expect(resRows.meta.totalUncappedCount).toBe(TECH_COUNT);
+    expect(resRows.items).toHaveLength(20);
+    expect(resRows.page).toBe(1);
+    expect(resRows.limit).toBe(20);
+    expect(resRows.totalPages).toBe(Math.ceil(TECH_COUNT / 20));
+
+    // Verify CSV serialization performance on paginated slice
+    const csvStart = performance.now();
+    const csv = serializeReportToCsv(resRows);
+    const csvEnd = performance.now();
+    const csvMs = csvEnd - csvStart;
+
+    expect(csv.split("\r\n").filter((l) => l.length > 0)).toHaveLength(21); // Header + 20 rows
 
     console.log(
-      `[Benchmark: technician.productivity @ 1,000 techs / 20,000 time entries] Execution: ${executionMs.toFixed(2)}ms`,
+      `[Benchmark: technician.productivity @ 1,000 techs / 20,000 time entries (ROWS mode)] Execution: ${executionMs.toFixed(2)}ms | CSV: ${csvMs.toFixed(2)}ms | Heap Delta: ${heapDeltaMb.toFixed(2)}MB | DB Queries: ${woQueries + timeEntryQueries + historyQueries + profileQueries}`,
     );
   });
 });

@@ -8,6 +8,25 @@ const mocks = vi.hoisted(() => ({
     customerFindFirst: vi.fn(),
     serviceLocationFindFirst: vi.fn(),
     serviceLocationCreate: vi.fn(),
+    serviceLocationCount: vi.fn(),
+    workspaceEntitlementOverrideFindUnique: vi.fn(),
+    subscriptionFindFirst: vi.fn(),
+    $transaction: vi.fn(async (cb: any) => cb({
+        serviceLocation: {
+            findFirst: mocks.serviceLocationFindFirst,
+            create: mocks.serviceLocationCreate,
+            count: mocks.serviceLocationCount,
+        },
+        workspace: {
+            findUnique: mocks.workspaceFindUnique,
+        },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
+        },
+    })),
 }));
 
 vi.mock("@/auth", () => ({
@@ -31,7 +50,15 @@ vi.mock("@/lib/prisma", () => ({
         serviceLocation: {
             findFirst: mocks.serviceLocationFindFirst,
             create: mocks.serviceLocationCreate,
+            count: mocks.serviceLocationCount,
         },
+        workspaceEntitlementOverride: {
+            findUnique: mocks.workspaceEntitlementOverrideFindUnique,
+        },
+        subscription: {
+            findFirst: mocks.subscriptionFindFirst,
+        },
+        $transaction: mocks.$transaction,
     },
 }));
 

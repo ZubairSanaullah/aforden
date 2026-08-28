@@ -448,44 +448,57 @@ model Workspace {
   timezone            String  @default("Asia/Karachi")
   defaultCurrencyCode String  @default("USD") @db.VarChar(3)
 
-  memberships                  WorkspaceMember[]
-  invitations                  WorkspaceInvitation[]
-  organization                 Organization?
-  employees                    Employee[]
-  departments                  Department[]
-  jobTitles                    JobTitle[]
-  skills                       Skill[]
-  serviceAreas                 ServiceArea[]
-  customers                    Customer[]
-  serviceCatalogs              ServiceCatalog[]
-  workTypes                    WorkType[]
-  workOrders                   WorkOrder[]
-  workOrderHistories           WorkOrderHistory[]
-  assets                       Asset[]
-  assetCategories              AssetCategory[]
-  assetHistories               AssetHistory[]
-  scheduleAppointments         ScheduleAppointment[]
-  scheduleAppointmentHistories ScheduleAppointmentHistory[]
-  technicianTimeEntries        TechnicianTimeEntry[]
-  parts                        Part[]
-  inventoryLocations           InventoryLocation[]
-  inventoryBalances            InventoryBalance[]
-  stockMovements               StockMovement[]
-  workOrderParts               WorkOrderPart[]
-  quotes                       Quote[]
-  quoteLineItems               QuoteLineItem[]
-  quoteHistories               QuoteHistory[]
-  invoices                     Invoice[]
-  invoiceLineItems             InvoiceLineItem[]
-  payments                     Payment[]
-  invoiceHistories             InvoiceHistory[]
-  notificationOutboxes         NotificationOutbox[]
-  notifications                Notification[]
-  notificationDeliveries       NotificationDelivery[]
-  notificationTemplates        NotificationTemplate[]
-  notificationPreferences      NotificationPreference[]
-  notificationLogs             NotificationLog[]
-  inAppNotificationFeeds       InAppNotificationFeed[]
+  memberships                   WorkspaceMember[]
+  invitations                   WorkspaceInvitation[]
+  organization                  Organization?
+  employees                     Employee[]
+  departments                   Department[]
+  jobTitles                     JobTitle[]
+  skills                        Skill[]
+  serviceAreas                  ServiceArea[]
+  customers                     Customer[]
+  serviceCatalogs               ServiceCatalog[]
+  workTypes                     WorkType[]
+  workOrders                    WorkOrder[]
+  workOrderHistories            WorkOrderHistory[]
+  assets                        Asset[]
+  assetCategories               AssetCategory[]
+  assetHistories                AssetHistory[]
+  scheduleAppointments          ScheduleAppointment[]
+  scheduleAppointmentHistories  ScheduleAppointmentHistory[]
+  technicianTimeEntries         TechnicianTimeEntry[]
+  parts                         Part[]
+  inventoryLocations            InventoryLocation[]
+  inventoryBalances             InventoryBalance[]
+  stockMovements                StockMovement[]
+  workOrderParts                WorkOrderPart[]
+  quotes                        Quote[]
+  quoteLineItems                QuoteLineItem[]
+  quoteHistories                QuoteHistory[]
+  invoices                      Invoice[]
+  invoiceLineItems              InvoiceLineItem[]
+  payments                      Payment[]
+  invoiceHistories              InvoiceHistory[]
+  notificationOutboxes          NotificationOutbox[]
+  notifications                 Notification[]
+  notificationDeliveries        NotificationDelivery[]
+  notificationTemplates         NotificationTemplate[]
+  notificationPreferences       NotificationPreference[]
+  notificationLogs              NotificationLog[]
+  inAppNotificationFeeds        InAppNotificationFeed[]
+  subscriptions                 Subscription[]
+  subscriptionInvoices          SubscriptionInvoice[]
+  subscriptionPayments          SubscriptionPayment[]
+  platformBillingAccount        PlatformBillingAccount?
+  workspaceEntitlementOverrides WorkspaceEntitlementOverride[]
+  automationRules               AutomationRule[]
+  automationTriggers            AutomationTrigger[]
+  automationConditionGroups     AutomationConditionGroup[]
+  automationConditions          AutomationCondition[]
+  automationActions             AutomationAction[]
+  automationExecutions          AutomationExecution[]
+  automationExecutionSteps      AutomationExecutionStep[]
+  automationScheduleJobs        AutomationScheduleJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1925,4 +1938,525 @@ model InAppNotificationFeed {
 
   @@index([workspaceId, memberId, isRead, isArchived])
   @@index([workspaceId, memberId, createdAt])
+}
+
+// ==========================================
+// SAAS BILLING & SUBSCRIPTIONS (Phase 1.15)
+// ==========================================
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  UNPAID
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAUSED
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum BillingProviderType {
+  STRIPE
+  MOCK
+}
+
+enum SubscriptionInvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  UNCOLLECTIBLE
+  VOID
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum PlanTier {
+  COMMUNITY_FREE
+  STARTER
+  GROWTH
+  ENTERPRISE
+  CUSTOM
+}
+
+enum FeatureValueType {
+  BOOLEAN
+  NUMERIC_LIMIT
+  STRING_VALUE
+}
+
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  code        String   @unique // e.g. "starter-2026", "growth-annual"
+  name        String // e.g. "Growth Plan"
+  tier        PlanTier @default(STARTER)
+  description String?
+  isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(true)
+  baseSeats   Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prices        SubscriptionPlanPrice[]
+  features      SubscriptionPlanFeature[]
+  subscriptions Subscription[]
+
+  @@index([tier, isActive])
+}
+
+model SubscriptionPlanPrice {
+  id                     String           @id @default(cuid())
+  planId                 String
+  plan                   SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  currency               String           @default("USD")
+  amountCents            Int // e.g. 4900 ($49.00)
+  billingInterval        BillingInterval  @default(MONTHLY)
+  perAdditionalSeatCents Int              @default(0) // Additional seat price
+  providerPriceId        String? // Stripe Price ID e.g. "price_1N..."
+  isActive               Boolean          @default(true)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  @@unique([planId, billingInterval, currency])
+}
+
+model SubscriptionPlanFeature {
+  id              String           @id @default(cuid())
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  featureKey      String // e.g. "MAX_MEMBERS", "FEATURE_ADVANCED_REPORTING"
+  featureType     FeatureValueType @default(BOOLEAN)
+  valueJson       Json // true, 1 (multiplier), 10 (absolute), "UNLIMITED"
+  scalesWithSeats Boolean          @default(false) // If true, valueJson is a per-seat multiplier
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([planId, featureKey])
+}
+
+model PlatformBillingAccount {
+  id                    String              @id @default(cuid())
+  workspaceId           String              @unique
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingEmail          String
+  billingName           String?
+  taxId                 String?
+  provider              BillingProviderType @default(STRIPE)
+  providerCustomerId    String?             @unique // Stripe Customer ID e.g. "cus_..."
+  paymentMethodBrand    String? // e.g. "visa", "mastercard"
+  paymentMethodLast4    String? // e.g. "4242"
+  paymentMethodExpMonth Int?
+  paymentMethodExpYear  Int?
+  delinquentSince       DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  subscriptions Subscription[]
+  invoices      SubscriptionInvoice[]
+
+  @@index([workspaceId])
+}
+
+model Subscription {
+  id                        String                 @id @default(cuid())
+  workspaceId               String
+  workspace                 Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId                 String
+  account                   PlatformBillingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  planId                    String
+  plan                      SubscriptionPlan       @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                    SubscriptionStatus     @default(TRIALING)
+  providerSubscriptionId    String?                @unique // Stripe Subscription ID e.g. "sub_..."
+  currentPeriodStart        DateTime
+  currentPeriodEnd          DateTime
+  trialStart                DateTime?
+  trialEnd                  DateTime?
+  cancelAtPeriodEnd         Boolean                @default(false)
+  canceledAt                DateTime?
+  endedAt                   DateTime?
+  seatsCount                Int                    @default(1)
+  dunningAttemptsCount      Int                    @default(0)
+  gracePeriodEndsAt         DateTime?
+  lastSyncedProviderEventAt DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  history  SubscriptionHistory[]
+  invoices SubscriptionInvoice[]
+
+  @@index([workspaceId, status])
+  @@index([providerSubscriptionId])
+}
+
+model WorkspaceEntitlementOverride {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  featureKey        String // e.g. "MAX_MEMBERS", "FEATURE_ADVANCED_REPORTING"
+  featureType       FeatureValueType @default(NUMERIC_LIMIT)
+  overrideValueJson Json // e.g. 50 (overrides plan limit of 10)
+  reason            String // e.g. "Enterprise pilot contract addendum"
+  grantedByUserId   String
+  expiresAt         DateTime? // null = permanent until revoked
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([workspaceId, featureKey])
+  @@index([workspaceId])
+}
+
+model SubscriptionInvoice {
+  id                String                    @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           PlatformBillingAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  providerInvoiceId String?                   @unique // Stripe Invoice ID e.g. "in_..."
+  status            SubscriptionInvoiceStatus @default(OPEN)
+  currency          String                    @default("USD")
+  amountDueCents    Int
+  amountPaidCents   Int                       @default(0)
+  subtotalCents     Int
+  taxCents          Int                       @default(0)
+  hostedInvoiceUrl  String?
+  invoicePdfUrl     String?
+  periodStart       DateTime
+  periodEnd         DateTime
+  paidAt            DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  payments SubscriptionPayment[]
+
+  @@index([workspaceId, status])
+  @@index([providerInvoiceId])
+}
+
+model SubscriptionPayment {
+  id                  String                    @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoiceId           String
+  invoice             SubscriptionInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  providerPaymentId   String?                   @unique // Stripe Charge / PaymentIntent ID e.g. "pi_..."
+  amountCents         Int
+  currency            String                    @default("USD")
+  status              SubscriptionPaymentStatus @default(SUCCEEDED)
+  paymentMethodBrand  String?
+  paymentMethodLast4  String?
+  failureReason       String?
+  refundedAmountCents Int                       @default(0)
+  paidAt              DateTime                  @default(now())
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([invoiceId])
+  @@index([providerPaymentId])
+}
+
+model BillingWebhookEvent {
+  id              String                  @id @default(cuid())
+  provider        BillingProviderType     @default(STRIPE)
+  providerEventId String                  @unique // e.g. "evt_1N..."
+  eventType       String // e.g. "invoice.payment_succeeded"
+  status          WebhookProcessingStatus @default(RECEIVED)
+  payloadJson     Json
+  processingError String?
+  processedAt     DateTime?
+  attemptsCount   Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([status, createdAt])
+  @@index([providerEventId])
+}
+
+model SubscriptionHistory {
+  id             String              @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  fromStatus     SubscriptionStatus?
+  toStatus       SubscriptionStatus
+  triggerSource  String // "WEBHOOK:invoice.payment_succeeded", "ADMIN_OVERRIDE", "CHECKOUT"
+  actorUserId    String?
+  metadataJson   Json?
+  createdAt      DateTime            @default(now())
+
+  @@index([subscriptionId, createdAt])
+}
+
+// ==========================================
+// AUTOMATION & WORKFLOWS (Phase 1.16)
+// ==========================================
+
+enum AutomationExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+  TIMED_OUT
+  CANCELED
+}
+
+enum AutomationExecutionStepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+  TIMED_OUT
+}
+
+enum AutomationErrorPolicy {
+  HALT_ON_ERROR
+  CONTINUE_ON_ERROR
+}
+
+enum AutomationTriggerType {
+  WORK_ORDER_CREATED
+  WORK_ORDER_STATUS_CHANGED
+  WORK_ORDER_ASSIGNED
+  WORK_ORDER_COMPLETED
+  QUOTE_APPROVED
+  QUOTE_EXPIRED
+  INVOICE_ISSUED
+  INVOICE_PAYMENT_RECORDED
+  INVOICE_OVERDUE
+  INVENTORY_LOW_STOCK_REACHED
+  ASSET_MAINTENANCE_DUE
+  SCHEDULED_CRON
+  SCHEDULED_INTERVAL
+  SCHEDULED_ENTITY_OFFSET
+}
+
+enum ConditionOperator {
+  EQUALS
+  NOT_EQUALS
+  GREATER_THAN
+  GREATER_THAN_OR_EQUAL
+  LESS_THAN
+  LESS_THAN_OR_EQUAL
+  CONTAINS
+  NOT_CONTAINS
+  STARTS_WITH
+  ENDS_WITH
+  MATCHES_REGEX
+  IN
+  NOT_IN
+  IS_EMPTY
+  IS_NOT_EMPTY
+  IS_NULL
+  IS_NOT_NULL
+  IS_TRUE
+  IS_FALSE
+  BEFORE_DATE
+  AFTER_DATE
+  WITHIN_LAST_DAYS
+  WITHIN_NEXT_DAYS
+}
+
+enum AutomationActionType {
+  WORK_ORDER_CREATE
+  WORK_ORDER_UPDATE_STATUS
+  WORK_ORDER_ASSIGN_TECHNICIAN
+  WORK_ORDER_ADD_NOTE
+  INVOICE_CREATE_FROM_WORK_ORDER
+  INVOICE_ISSUE
+  NOTIFICATION_SEND_EMAIL
+  NOTIFICATION_SEND_IN_APP
+  INVENTORY_RESERVE_PARTS
+  CUSTOMER_UPDATE_STATUS
+  ASSET_SCHEDULE_MAINTENANCE
+}
+
+enum AutomationConditionLogicalOperator {
+  AND
+  OR
+}
+
+model AutomationRule {
+  id          String                @id @default(cuid())
+  workspaceId String
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String                @db.VarChar(255)
+  description String?               @db.Text
+  isEnabled   Boolean               @default(true)
+  errorPolicy AutomationErrorPolicy @default(HALT_ON_ERROR)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  trigger        AutomationTrigger?
+  conditionGroup AutomationConditionGroup?
+  actions        AutomationAction[]
+  executions     AutomationExecution[]
+  scheduleJobs   AutomationScheduleJob[]
+
+  @@index([workspaceId, isEnabled])
+  @@index([workspaceId, createdAt])
+}
+
+model AutomationTrigger {
+  id          String                @id @default(cuid())
+  workspaceId String
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId      String                @unique
+  rule        AutomationRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  triggerType AutomationTriggerType
+  eventType   String?               @db.VarChar(128)
+  configJson  Json?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([workspaceId, triggerType])
+  @@index([workspaceId, eventType])
+}
+
+model AutomationConditionGroup {
+  id              String                             @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace                          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId          String?                            @unique
+  rule            AutomationRule?                    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  parentGroupId   String?
+  parentGroup     AutomationConditionGroup?          @relation("ConditionGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Cascade)
+  childGroups     AutomationConditionGroup[]         @relation("ConditionGroupHierarchy")
+  logicalOperator AutomationConditionLogicalOperator @default(AND)
+  conditions      AutomationCondition[]
+  createdAt       DateTime                           @default(now())
+  updatedAt       DateTime                           @updatedAt
+
+  @@index([workspaceId])
+  @@index([parentGroupId])
+}
+
+model AutomationCondition {
+  id               String                   @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conditionGroupId String
+  conditionGroup   AutomationConditionGroup @relation(fields: [conditionGroupId], references: [id], onDelete: Cascade)
+  fieldPath        String                   @db.VarChar(255)
+  operator         ConditionOperator
+  targetValueJson  Json
+  valueType        String?                  @db.VarChar(64)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([workspaceId])
+  @@index([conditionGroupId])
+}
+
+model AutomationAction {
+  id          String               @id @default(cuid())
+  workspaceId String
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId      String
+  rule        AutomationRule       @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  stepOrder   Int
+  actionType  AutomationActionType
+  paramsJson  Json
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([ruleId, stepOrder])
+  @@index([workspaceId])
+  @@index([ruleId, stepOrder])
+}
+
+model AutomationExecution {
+  id                 String                    @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId             String?
+  rule               AutomationRule?           @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  status             AutomationExecutionStatus @default(PENDING)
+  correlationId      String                    @db.VarChar(128)
+  parentExecutionId  String?
+  parentExecution    AutomationExecution?      @relation("ExecutionHierarchy", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  childExecutions    AutomationExecution[]     @relation("ExecutionHierarchy")
+  causalityChain     String[]
+  executionDepth     Int                       @default(0)
+  triggerPayloadJson Json
+  dedupeKey          String?                   @db.VarChar(255)
+  reasonCode         String?                   @db.VarChar(128)
+  errorJson          Json?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  durationMs         Int?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  steps AutomationExecutionStep[]
+
+  @@unique([workspaceId, ruleId, dedupeKey])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, ruleId, createdAt])
+  @@index([correlationId])
+  @@index([parentExecutionId])
+}
+
+model AutomationExecutionStep {
+  id          String                        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executionId String
+  execution   AutomationExecution           @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stepOrder   Int
+  actionType  AutomationActionType
+  status      AutomationExecutionStepStatus @default(PENDING)
+  inputJson   Json?
+  outputJson  Json?
+  errorJson   Json?
+  durationMs  Int?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                      @default(now())
+
+  @@unique([executionId, stepOrder])
+  @@index([workspaceId, status])
+  @@index([executionId, stepOrder])
+}
+
+model AutomationScheduleJob {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId           String
+  rule             AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  scheduleKind     String         @db.VarChar(64)
+  cronExpression   String?        @db.VarChar(128)
+  intervalSeconds  Int?
+  entityOffsetJson Json?
+  nextRunAt        DateTime?
+  lastRunAt        DateTime?
+  isActive         Boolean        @default(true)
+  failureCount     Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([workspaceId, isActive, nextRunAt])
+  @@index([ruleId])
 }

@@ -45,9 +45,16 @@ const mocks = vi.hoisted(() => ({
             findUnique: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
+            count: vi.fn().mockResolvedValue(0),
         },
         workspace: {
             findUnique: vi.fn(),
+        },
+        workspaceEntitlementOverride: {
+            findUnique: vi.fn().mockResolvedValue(null),
+        },
+        subscription: {
+            findFirst: vi.fn().mockResolvedValue(null),
         },
         user: {
             findUnique: vi.fn(),

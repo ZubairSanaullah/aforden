@@ -8,6 +8,7 @@ import {
     InvalidEmployeeError,
 } from "./technicianProfileErrors";
 import type { TechnicianProfile } from "@/generated/prisma/client";
+import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
 
 /**
  * Creates a TechnicianProfile for an Employee in a specific workspace.
@@ -56,15 +57,26 @@ export async function createTechnicianProfile(
         throw new TechnicianProfileAlreadyExistsError();
     }
 
-    // --- Create TechnicianProfile ---
-    const profile = await prisma.technicianProfile.create({
-        data: {
-            employeeId,
-            licenseNumber: data.licenseNumber ?? null,
-            yearsExperience: data.yearsExperience ?? null,
-            emergencyContact: data.emergencyContact ?? null,
-            notes: data.notes ?? null,
-        },
+    // --- Create TechnicianProfile (within transaction for atomic quota enforcement) ---
+    const runTx =
+        typeof prisma.$transaction === "function"
+            ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+            : async (cb: (tx: any) => Promise<any>) => cb(prisma);
+
+    const profile = await runTx(async (tx) => {
+        // Phase 1.15.5: Assert MAX_TECHNICIANS quota inside the transaction so the
+        // count and profile creation are atomic, preventing TOCTOU races.
+        await assertEntitlement(tx, workspaceId, "MAX_TECHNICIANS");
+
+        return tx.technicianProfile.create({
+            data: {
+                employeeId,
+                licenseNumber: data.licenseNumber ?? null,
+                yearsExperience: data.yearsExperience ?? null,
+                emergencyContact: data.emergencyContact ?? null,
+                notes: data.notes ?? null,
+            },
+        });
     });
 
     return profile;

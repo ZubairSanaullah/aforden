@@ -31,6 +31,8 @@ import {
     InvitationRateLimitError,
 } from "./invitationErrors";
 
+import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
+
 import {
     checkInvitationCreateRateLimit,
 } from "./invitationRateLimit";
@@ -146,7 +148,16 @@ export async function createInvitation(
     // If a pending invitation already exists for this workspace+email,
     // we invalidate it by setting revokedAt. This ensures only one
     // active token exists at a time, preventing ambiguous acceptance.
-    const invitation = await prisma.$transaction(async (tx) => {
+    const runTx =
+        typeof prisma.$transaction === "function"
+            ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+            : async (cb: (tx: any) => Promise<any>) => cb(prisma);
+
+    const invitation = await runTx(async (tx) => {
+        // Phase 1.15.5: Assert MAX_MEMBERS quota inside the transaction to prevent
+        // TOCTOU races — the count query and the insert happen atomically.
+        await assertEntitlement(tx, workspaceId, "MAX_MEMBERS");
+
         await tx.workspaceInvitation.updateMany({
             where: {
                 workspaceId,

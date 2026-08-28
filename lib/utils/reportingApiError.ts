@@ -15,6 +15,10 @@ import {
   ReportingIdentifierViolationError,
   ReportMetricUnavailableError,
 } from "@/lib/services/reporting/reportingErrors";
+import {
+  PlanFeatureNotEnabledError,
+  QuotaExceededError,
+} from "@/lib/services/billing/billingErrors";
 
 /**
  * Extracts the tenant workspace ID from route context params, standard headers, or query parameters.
@@ -149,7 +153,23 @@ export function handleReportingApiError(
     );
   }
 
-  // 4. Reporting Pure Domain Error Classes (Convention B: statusCode / code metadata)
+  // 4. Billing Entitlement Errors (Phase 1.15.5)
+  // PlanFeatureNotEnabledError — feature gated (403 Forbidden)
+  // QuotaExceededError — resource quota reached (402 Payment Required)
+  if (error instanceof PlanFeatureNotEnabledError || error instanceof QuotaExceededError) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      },
+      { status: error.statusCode },
+    );
+  }
+
+  // 5. Reporting Pure Domain Error Classes (Convention B: statusCode / code metadata)
   if (
     error instanceof ReportNotFoundError ||
     error instanceof UnknownMetricError ||
@@ -176,7 +196,7 @@ export function handleReportingApiError(
     );
   }
 
-  // 5. Generic duck-typing for custom domain errors
+  // 6. Generic duck-typing for custom domain errors
   if (
     error &&
     typeof error === "object" &&
@@ -197,7 +217,7 @@ export function handleReportingApiError(
     );
   }
 
-  // 6. Unhandled / Unexpected Errors (500 Internal Server Error — sanitizing internals)
+  // 7. Unhandled / Unexpected Errors (500 Internal Server Error — sanitizing internals)
   console.error(
     `[Reporting API Error] ${context ? `[${context}] ` : ""}`,
     error,
