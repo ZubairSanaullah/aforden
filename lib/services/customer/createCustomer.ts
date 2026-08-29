@@ -7,6 +7,7 @@ import {
     DuplicateCustomerNumberError,
     CustomerCreationError,
 } from "./customerErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Customer } from "@/generated/prisma/client";
 
 const CUSTOMER_NUMBER_PREFIX = "CUST-";
@@ -63,12 +64,13 @@ async function getNextCustomerNumber(workspaceId: string): Promise<string> {
 export async function createCustomer(
     workspaceId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<Customer> {
     // --- Validate Input ---
     const data = createCustomerSchema.parse(input);
 
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_CREATE permission ---
     assertPermission(

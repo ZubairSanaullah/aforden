@@ -26,7 +26,7 @@ export const ingestAutomationEventSchema = z.object({
   eventType: z.string().min(1, "eventType is required"),
   sourceEntity: z.string().min(1, "sourceEntity is required"),
   sourceId: z.string().min(1, "sourceId is required"),
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
   eventTimestamp: z.union([z.date(), z.string(), z.number()]).optional(),
   correlationId: z.string().max(128).optional(),
   parentExecutionId: z.string().nullable().optional(),

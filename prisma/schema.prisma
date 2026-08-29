@@ -432,6 +432,7 @@ model User {
   passwordResets  PasswordResetToken[]
   sentInvitations WorkspaceInvitation[]
   assetHistories  AssetHistory[]
+  createdDeveloperApplications DeveloperApplication[] @relation("CreatedDeveloperApplications")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -499,6 +500,13 @@ model Workspace {
   automationExecutions          AutomationExecution[]
   automationExecutionSteps      AutomationExecutionStep[]
   automationScheduleJobs        AutomationScheduleJob[]
+  integrationConnections        IntegrationConnection[]
+  integrationWebhooks           IntegrationWebhook[]
+  integrationExecutions         IntegrationExecution[]
+  integrationWebhookEvents      IntegrationWebhookEvent[]
+  activeExclusiveCapabilities   WorkspaceActiveExclusiveCapability[]
+  integrationSetting            WorkspaceIntegrationSetting?
+  developerApplications         DeveloperApplication[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2460,3 +2468,300 @@ model AutomationScheduleJob {
   @@index([workspaceId, isActive, nextRunAt])
   @@index([ruleId])
 }
+
+// -----------------------------------------------------------------------------
+// Phase 1.17 — Third-Party Integrations & Provider Abstraction
+// -----------------------------------------------------------------------------
+
+enum IntegrationStatus {
+  ACTIVE
+  DEPRECATED
+  DISABLED
+}
+
+enum IntegrationConnectionStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  ERROR
+  SUSPENDED_ENTITLEMENT
+}
+
+enum IntegrationCredentialStatus {
+  ACTIVE
+  ROTATING
+  SUPERSEDED
+  REVOKED
+}
+
+enum IntegrationWebhookStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+}
+
+enum IntegrationExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMED_OUT
+}
+
+enum IntegrationCapability {
+  EMAIL_SEND
+  SMS_SEND
+  CALENDAR_WRITE
+  CALENDAR_READ
+  ACCOUNTING_INVOICE_SYNC
+  ACCOUNTING_PAYMENT_SYNC
+  ACCOUNTING_CUSTOMER_SYNC
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+  WEBHOOK_RECEIVE
+  CRM_CONTACT_SYNC
+}
+
+enum IntegrationFailureCode {
+  AUTHENTICATION_FAILED
+  TOKEN_EXPIRED
+  RATE_LIMITED
+  NETWORK_TIMEOUT
+  SERVICE_UNAVAILABLE
+  BAD_REQUEST
+  PAYLOAD_VALIDATION_FAILED
+  RESOURCE_NOT_FOUND
+  CAPABILITY_UNSUPPORTED
+  ENTITLEMENT_BLOCKED
+  INTERNAL_ADAPTER_ERROR
+}
+
+model Integration {
+  id               String                  @id
+  name             String
+  description      String?
+  logoUrl          String?
+  status           IntegrationStatus       @default(ACTIVE)
+  capabilities     IntegrationCapability[]
+  configSchemaJson Json?
+  authType         String?                 @db.VarChar(64)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  connections IntegrationConnection[]
+
+  @@index([status])
+}
+
+model IntegrationConnection {
+  id                  String                      @id @default(cuid())
+  workspaceId         String
+  integrationId       String
+  connectionKey       String                      @default("default") @db.VarChar(64)
+  status              IntegrationConnectionStatus @default(DISCONNECTED)
+  configJson          Json?
+  metadataJson        Json?
+  externalAccountId   String?                     @db.VarChar(255)
+  externalAccountName String?                     @db.VarChar(255)
+  lastTestedAt        DateTime?
+  lastErrorJson       Json?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  workspace                   Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integration                 Integration                          @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  credentials                 IntegrationCredential[]
+  webhooks                    IntegrationWebhook[]
+  executions                  IntegrationExecution[]
+  webhookEvents               IntegrationWebhookEvent[]
+  activeExclusiveCapabilities WorkspaceActiveExclusiveCapability[]
+
+  @@unique([workspaceId, integrationId, connectionKey])
+  @@index([workspaceId, status])
+  @@index([integrationId])
+}
+
+model IntegrationCredential {
+  id               String                      @id @default(cuid())
+  connectionId     String
+  version          Int                         @default(1)
+  status           IntegrationCredentialStatus @default(ACTIVE)
+  keyVaultProvider String                      @default("AWS_KMS") @db.VarChar(64)
+  algorithm        String                      @default("AES_256_GCM") @db.VarChar(64)
+  iv               String                      @db.VarChar(255)
+  tag              String                      @db.VarChar(255)
+  encryptedData    String                      @db.Text
+  encryptedDek     String?                     @db.Text
+  fingerprint      String                      @db.VarChar(255)
+  expiresAt        DateTime?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, version])
+  @@index([connectionId, status])
+  @@index([fingerprint])
+}
+
+model IntegrationWebhook {
+  id            String                   @id @default(cuid())
+  workspaceId   String
+  connectionId  String
+  endpointSlug  String                   @unique @db.VarChar(255)
+  description   String?
+  status        IntegrationWebhookStatus @default(ACTIVE)
+  secretRefId   String?                  @db.VarChar(255)
+  enabledEvents String[]
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([connectionId])
+}
+
+model IntegrationExecution {
+  id                   String                     @id @default(cuid())
+  workspaceId          String
+  connectionId         String
+  capability           IntegrationCapability
+  action               String                     @db.VarChar(128)
+  status               IntegrationExecutionStatus @default(PENDING)
+  idempotencyKey       String                     @db.VarChar(255)
+  correlationId        String                     @db.VarChar(255)
+  attemptNumber        Int                        @default(1)
+  requestSnapshotJson  Json?
+  responseSnapshotJson Json?
+  rawResponseStatus    Int?
+  providerRequestId    String?                    @db.VarChar(255)
+  durationMs           Int?
+  failureCode          IntegrationFailureCode?
+  failureJson          Json?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                   @default(now())
+
+  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([connectionId, createdAt])
+  @@index([idempotencyKey])
+  @@index([correlationId])
+  @@index([workspaceId, status, createdAt])
+}
+
+model IntegrationWebhookEvent {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  connectionId    String
+  providerEventId String    @db.VarChar(255)
+  eventType       String?   @db.VarChar(128)
+  status          String    @default("RECEIVED") @db.VarChar(64)
+  headersJson     Json?
+  payloadJson     Json?
+  errorJson       Json?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, providerEventId])
+  @@index([workspaceId, createdAt])
+  @@index([connectionId, createdAt])
+}
+
+model WorkspaceActiveExclusiveCapability {
+  id           String                @id @default(cuid())
+  workspaceId  String
+  capability   IntegrationCapability
+  connectionId String
+  createdAt    DateTime              @default(now())
+
+  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, capability])
+  @@index([workspaceId])
+  @@index([connectionId])
+}
+
+model WorkspaceIntegrationSetting {
+  id                   String   @id @default(cuid())
+  workspaceId          String   @unique
+  defaultProvidersJson Json?
+  settingsJson         Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// ============================================================================
+// Phase 1.18: Public API & Developer Platform Domain Models
+// ============================================================================
+
+enum DeveloperApplicationStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ApiKeyEnvironment {
+  LIVE
+  TEST
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model DeveloperApplication {
+  id              String                     @id @default(cuid())
+  workspaceId     String
+  name            String                     @db.VarChar(255)
+  description     String?                    @db.Text
+  status          DeveloperApplicationStatus @default(ACTIVE)
+  createdByUserId String
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  workspace       Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdByUser   User                       @relation("CreatedDeveloperApplications", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  apiKeys         ApiKey[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([createdByUserId])
+}
+
+model ApiKey {
+  id                     String            @id @default(cuid())
+  developerApplicationId String
+  keyHash                String            @unique @db.VarChar(64)
+  keyPrefix              String            @db.VarChar(32)
+  environment            ApiKeyEnvironment @default(LIVE)
+  status                 ApiKeyStatus      @default(ACTIVE)
+  scopes                 String[]
+  expiresAt              DateTime?
+  revokedAt              DateTime?
+  lastUsedAt             DateTime?
+  metadata               Json?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  developerApplication   DeveloperApplication @relation(fields: [developerApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([developerApplicationId])
+  @@index([developerApplicationId, status])
+  @@index([status, expiresAt])
+}
+

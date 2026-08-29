@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { getAssetsQuerySchema } from "./asset.schemas";
 import type { AssetListItem, AssetListResult } from "./asset.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -78,9 +79,10 @@ export function toAssetListItem(record: any): AssetListItem {
 export async function getAssets(
     workspaceId: string,
     queryInput: unknown = {},
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<AssetListResult> {
     // --- 1. Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. RBAC Permission Assertion ---

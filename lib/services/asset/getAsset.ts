@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { AssetNotFoundError } from "./assetErrors";
 import type { AssetDetailViewModel } from "./asset.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -95,9 +96,10 @@ export function toAssetDetailViewModel(record: any): AssetDetailViewModel {
 export async function getAsset(
     workspaceId: string,
     assetId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<AssetDetailViewModel> {
     // --- 1. Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. RBAC Permission Assertion ---

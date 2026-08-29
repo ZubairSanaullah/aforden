@@ -7,6 +7,7 @@ import {
     type CustomerQueryInput,
 } from "@/lib/validations/customer";
 import type { CustomerListResult } from "./customer.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 const sortFieldMap: Record<string, keyof Prisma.CustomerOrderByWithRelationInput> = {
@@ -32,9 +33,10 @@ const sortFieldMap: Record<string, keyof Prisma.CustomerOrderByWithRelationInput
 export async function getCustomers(
     workspaceId: string,
     options?: CustomerQueryInput,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<CustomerListResult> {
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_VIEW permission ---
     assertPermission(

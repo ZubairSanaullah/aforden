@@ -9,13 +9,13 @@
 1.9  Technician Operations                           ✅
 1.10 Inventory & Parts                               ✅
 1.11 Quotes & Estimates                              ✅
-1.12 Invoicing & Payments
-1.13 Notifications & Communications
-1.14 Reporting & Analytics
-1.15 SaaS Billing & Subscriptions
-1.16 Automation & Workflows
-1.17 Integrations
-1.18 Public API & Developer Platform
+1.12 Invoicing & Payments                            ✅
+1.13 Notifications & Communications                  ✅
+1.14 Reporting & Analytics                           ✅
+1.15 SaaS Billing & Subscriptions                    ✅
+1.16 Automation & Workflows                          ✅
+1.17 Integrations                                    
+1.18 Public API & Developer Platform                 
 1.19 Aforden Platform Administration
 1.20 Security & Reliability Hardening
 1.21 Testing & Quality Assurance

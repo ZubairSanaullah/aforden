@@ -107,7 +107,7 @@ export function handleAutomationApiError(
         error: {
           code: error.code || "PLAN_FEATURE_NOT_ENABLED",
           message: error.message,
-          featureKey: error.featureKey,
+          featureKey: error.context.featureKey,
         },
       },
       { status: 403 },
@@ -121,7 +121,7 @@ export function handleAutomationApiError(
         error: {
           code: error.code || "QUOTA_EXCEEDED",
           message: error.message,
-          featureKey: error.featureKey,
+          featureKey: error.context.featureKey,
         },
       },
       { status: 403 },

@@ -9,6 +9,7 @@ import {
     ServiceLocationCreationError,
     ServiceLocationPrimaryExistsError,
 } from "./customerErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import { Prisma, type ServiceLocation } from "@/generated/prisma/client";
 import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
 
@@ -29,12 +30,13 @@ export async function createServiceLocation(
     workspaceId: string,
     customerId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<ServiceLocation> {
     // --- 1. Validate Input Payload ---
     const validated = createServiceLocationSchema.parse(input);
 
     // --- 2. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 3. RBAC: Enforce CUSTOMERS_UPDATE permission ---
     assertPermission(

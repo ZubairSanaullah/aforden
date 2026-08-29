@@ -13,6 +13,7 @@ import {
     AssetCategoryInactiveError,
     DuplicateAssetNumberError,
 } from "./assetErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { AssetDetailViewModel } from "./asset.types";
 import type { AssetStatus } from "@/generated/prisma/client";
 
@@ -40,9 +41,10 @@ const MAX_NUMBER_GENERATION_ATTEMPTS = 5;
 export async function createAsset(
     workspaceId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<AssetDetailViewModel> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce ASSETS_CREATE permission ---
     assertPermission(
@@ -239,7 +241,7 @@ export async function createAsset(
                         workspaceId,
                         assetId: asset.id,
                         eventType: "CREATED",
-                        actorUserId: authorization.user.id,
+                        actorUserId: authorization.user.id?.startsWith("api_app_") ? null : authorization.user.id,
                         actorRole: authorization.membership.role,
                         reason: "Asset registered in workspace",
                         metadata: {

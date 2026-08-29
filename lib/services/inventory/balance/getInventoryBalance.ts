@@ -6,6 +6,7 @@ import { getInventoryBalanceParamsSchema } from "./inventoryBalance.schemas";
 import { PartNotFoundError } from "@/lib/services/inventory/part/partErrors";
 import { InventoryLocationNotFoundError } from "@/lib/services/inventory/inventoryLocation/inventoryLocationErrors";
 import type { InventoryBalanceDetailViewModel } from "./inventoryBalance.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 
 /**
  * Retrieves the current InventoryBalance for a specific (partId, locationId) pair in a workspace.
@@ -23,9 +24,10 @@ export async function getInventoryBalance(
     workspaceId: string,
     partId: string,
     locationId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<InventoryBalanceDetailViewModel> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce INVENTORY_VIEW permission ---
     assertPermission(

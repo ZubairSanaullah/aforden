@@ -8,6 +8,7 @@ import {
 } from "@/lib/validations/serviceLocation";
 import { CustomerNotFoundError } from "./customerErrors";
 import type { ServiceLocationListResult } from "./customer.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 const sortFieldMap: Record<string, keyof Prisma.ServiceLocationOrderByWithRelationInput> = {
@@ -38,9 +39,10 @@ export async function getServiceLocations(
     workspaceId: string,
     customerId: string,
     options?: ServiceLocationQueryInput,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<ServiceLocationListResult> {
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_VIEW permission ---
     assertPermission(

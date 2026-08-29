@@ -17,9 +17,9 @@ import {
   AutomationAuthorizationError,
 } from "./automationErrors";
 import { executeAutomationPipeline } from "./executionEngineService";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type {
   DbClient,
-  WorkspaceAuthorizationContext,
   ExecutionPipelineResult,
 } from "./automation.types";
 
@@ -79,7 +79,7 @@ function assertDlqAuthorization(
   requiredRole: "VIEW" | "MANAGE",
 ): void {
   if (!actor) return;
-  const role = (actor as any).membership?.role ?? actor.role;
+  const role = actor.membership?.role;
 
   if (requiredRole === "MANAGE") {
     if (role !== MembershipRole.OWNER && role !== MembershipRole.ADMIN) {
@@ -392,7 +392,7 @@ export async function purgeDeadLetterExecution(
         ...existingErrJson,
         isPurged: true,
         purgedAt: new Date().toISOString(),
-        purgedBy: actor?.userId ?? "SYSTEM",
+        purgedBy: actor?.user?.id ?? "SYSTEM",
       },
     },
   });

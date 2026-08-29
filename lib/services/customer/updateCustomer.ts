@@ -9,6 +9,7 @@ import {
     CustomerUpdateError,
     InvalidCustomerError,
 } from "./customerErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Customer, Prisma } from "@/generated/prisma/client";
 
 /**
@@ -30,12 +31,13 @@ export async function updateCustomer(
     workspaceId: string,
     customerId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<Customer> {
     // --- Validate Input ---
     const data = updateCustomerSchema.parse(input);
 
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_UPDATE permission ---
     assertPermission(

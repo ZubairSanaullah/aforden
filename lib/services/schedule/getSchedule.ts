@@ -8,6 +8,7 @@ import {
     SCHEDULE_APPOINTMENT_INCLUDE,
 } from "./scheduleReadModel";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 
 /**
  * Retrieves a single ScheduleAppointment by ID in a tenant-isolated workspace.
@@ -15,8 +16,9 @@ import type { ScheduleAppointmentReadModel } from "./schedule.types";
 export async function getSchedule(
     workspaceId: string,
     appointmentId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<ScheduleAppointmentReadModel> {
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     assertPermission(
         authorization.membership.role,
         PERMISSIONS.SCHEDULER_VIEW,

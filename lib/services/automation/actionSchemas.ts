@@ -10,6 +10,7 @@ import {
   WorkOrderStatus,
   WorkOrderPriority,
   CustomerStatus,
+  InvoiceStatus,
 } from "@/generated/prisma/client";
 import { NotificationEventType } from "@/generated/prisma/enums";
 
@@ -35,9 +36,7 @@ export type WorkOrderCreateActionParams = z.infer<typeof workOrderCreateActionPa
 // ==========================================
 export const workOrderUpdateStatusActionParamsSchema = z.object({
   workOrderId: z.string().min(1, "workOrderId is required"),
-  toStatus: z.nativeEnum(WorkOrderStatus, {
-    errorMap: () => ({ message: "Valid toStatus is required" }),
-  }),
+  toStatus: z.nativeEnum(WorkOrderStatus),
   holdReason: z.string().nullable().optional(),
   cancellationReason: z.string().nullable().optional(),
 });
@@ -50,6 +49,7 @@ export type WorkOrderUpdateStatusActionParams = z.infer<typeof workOrderUpdateSt
 export const workOrderAssignTechnicianActionParamsSchema = z.object({
   workOrderId: z.string().min(1, "workOrderId is required"),
   technicianId: z.string().min(1, "technicianId is required"),
+  notes: z.string().optional(),
 });
 
 export type WorkOrderAssignTechnicianActionParams = z.infer<typeof workOrderAssignTechnicianActionParamsSchema>;
@@ -71,8 +71,17 @@ export const workOrderAddNoteActionParamsSchema = z
 export type WorkOrderAddNoteActionParams = z.infer<typeof workOrderAddNoteActionParamsSchema>;
 
 // ==========================================
-// 5. INVOICE_CREATE_FROM_WORK_ORDER
+// 5. INVOICE_CREATE_DRAFT & INVOICE_CREATE_FROM_WORK_ORDER
 // ==========================================
+export const invoiceCreateDraftActionParamsSchema = z.object({
+  workOrderId: z.string().min(1, "workOrderId is required"),
+  dueDate: z.union([z.string().min(1), z.date()]).optional(),
+  notes: z.string().optional(),
+  terms: z.string().optional(),
+});
+
+export type InvoiceCreateDraftActionParams = z.infer<typeof invoiceCreateDraftActionParamsSchema>;
+
 export const invoiceCreateFromWorkOrderActionParamsSchema = z.object({
   workOrderId: z.string().min(1, "workOrderId is required"),
   paymentTermsDays: z.number().int().min(0).optional(),
@@ -82,8 +91,16 @@ export const invoiceCreateFromWorkOrderActionParamsSchema = z.object({
 export type InvoiceCreateFromWorkOrderActionParams = z.infer<typeof invoiceCreateFromWorkOrderActionParamsSchema>;
 
 // ==========================================
-// 6. INVOICE_ISSUE
+// 6. INVOICE_UPDATE_STATUS & INVOICE_ISSUE
 // ==========================================
+export const invoiceUpdateStatusActionParamsSchema = z.object({
+  invoiceId: z.string().min(1, "invoiceId is required"),
+  status: z.nativeEnum(InvoiceStatus),
+  reason: z.string().optional(),
+});
+
+export type InvoiceUpdateStatusActionParams = z.infer<typeof invoiceUpdateStatusActionParamsSchema>;
+
 export const invoiceIssueActionParamsSchema = z.object({
   invoiceId: z.string().min(1, "invoiceId is required"),
 });
@@ -100,7 +117,7 @@ export const notificationSendEmailActionParamsSchema = z.object({
   recipientEmail: z.string().optional(),
   subject: z.string().optional(),
   body: z.string().optional(),
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type NotificationSendEmailActionParams = z.infer<typeof notificationSendEmailActionParamsSchema>;
@@ -115,7 +132,7 @@ export const notificationSendInAppActionParamsSchema = z.object({
   recipientMemberId: z.string().optional(),
   title: z.string().optional(),
   message: z.string().optional(),
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type NotificationSendInAppActionParams = z.infer<typeof notificationSendInAppActionParamsSchema>;
@@ -138,9 +155,7 @@ export type InventoryReservePartsActionParams = z.infer<typeof inventoryReserveP
 // ==========================================
 export const customerUpdateStatusActionParamsSchema = z.object({
   customerId: z.string().min(1, "customerId is required"),
-  status: z.nativeEnum(CustomerStatus, {
-    errorMap: () => ({ message: "Valid status (ACTIVE | INACTIVE) is required" }),
-  }),
+  status: z.nativeEnum(CustomerStatus),
   reason: z.string().optional(),
 });
 

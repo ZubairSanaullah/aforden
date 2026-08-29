@@ -7,6 +7,7 @@ import type {
     InventoryBalanceDetailViewModel,
     InventoryBalanceListResult,
 } from "./inventoryBalance.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -22,9 +23,10 @@ import type { Prisma } from "@/generated/prisma/client";
 export async function getInventoryBalances(
     workspaceId: string,
     rawQuery: unknown = {},
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<InventoryBalanceListResult> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce INVENTORY_VIEW permission ---
     assertPermission(

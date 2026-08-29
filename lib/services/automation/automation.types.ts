@@ -3,6 +3,7 @@
  * Defines the canonical types and interfaces for trigger ingestion, deduplication, and event matching.
  */
 
+import type { PrismaClient, Prisma } from "@/generated/prisma/client";
 import type {
   AutomationTriggerType,
   AutomationExecutionStatus,
@@ -11,6 +12,7 @@ import type {
   AutomationActionType,
   ConditionOperator,
   AutomationConditionLogicalOperator,
+  MembershipRole,
 } from "@/generated/prisma/enums";
 
 export type {
@@ -164,11 +166,14 @@ export interface ActionExecutionContext {
   executionId?: string | null;
   stepOrder?: number;
   trigger: {
+    id?: string | null;
     type?: AutomationTriggerType | string | null;
+    triggerType?: AutomationTriggerType | string | null;
     eventType?: string | null;
     sourceEntity?: string | null;
     sourceId?: string | null;
     payload: Record<string, unknown>;
+    [key: string]: unknown;
   };
   steps?: Record<string, { output?: Record<string, unknown>; [key: string]: unknown }>;
   metadata?: Record<string, unknown>;
@@ -189,6 +194,8 @@ export interface ActionResult<TData = Record<string, unknown>> {
     message: string;
     details?: unknown;
     stack?: string;
+    category?: any;
+    attemptCount?: number;
   };
   idempotencyKey?: string;
 }
@@ -420,3 +427,12 @@ export interface TestRunAutomationRuleInput {
   sourceId?: string;
   payload?: Record<string, unknown>;
 }
+
+export type DbClient = PrismaClient | Prisma.TransactionClient;
+
+export interface WorkspaceAuthorizationContext {
+  workspaceId: string;
+  userId?: string;
+  role?: MembershipRole;
+}
+

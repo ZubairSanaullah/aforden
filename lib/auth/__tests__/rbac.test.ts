@@ -109,6 +109,24 @@ describe("Aforden RBAC Permission Registry", () => {
         );
     });
 
+    it("contains all expected integration permissions", () => {
+        expect(ALL_PERMISSIONS).toContain(
+            PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+        );
+
+        expect(ALL_PERMISSIONS).toContain(
+            PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+        );
+
+        expect(ALL_PERMISSIONS).toContain(
+            PERMISSIONS.INTEGRATIONS_MANAGE_CREDENTIALS,
+        );
+
+        expect(ALL_PERMISSIONS).toContain(
+            PERMISSIONS.INTEGRATIONS_VIEW_HISTORY,
+        );
+    });
+
     it("recognizes valid permissions", () => {
         expect(
             isPermission(PERMISSIONS.CUSTOMERS_VIEW),
@@ -199,6 +217,36 @@ describe("Aforden ADMIN permissions", () => {
             ),
         ).toBe(true);
     });
+
+    it("allows ADMIN to manage integrations and credentials", () => {
+        expect(
+            roleHasPermission(
+                "ADMIN",
+                PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "ADMIN",
+                PERMISSIONS.INTEGRATIONS_VIEW_HISTORY,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "ADMIN",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "ADMIN",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CREDENTIALS,
+            ),
+        ).toBe(true);
+    });
 });
 
 describe("Aforden MANAGER permissions", () => {
@@ -246,6 +294,36 @@ describe("Aforden MANAGER permissions", () => {
             roleHasPermission(
                 "MANAGER",
                 PERMISSIONS.BILLING_MANAGE,
+            ),
+        ).toBe(false);
+    });
+
+    it("allows MANAGER to view integration status and history, but not manage connections or credentials", () => {
+        expect(
+            roleHasPermission(
+                "MANAGER",
+                PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "MANAGER",
+                PERMISSIONS.INTEGRATIONS_VIEW_HISTORY,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "MANAGER",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "MANAGER",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CREDENTIALS,
             ),
         ).toBe(false);
     });
@@ -298,6 +376,36 @@ describe("Aforden DISPATCHER permissions", () => {
             roleHasPermission(
                 "DISPATCHER",
                 PERMISSIONS.BILLING_MANAGE,
+            ),
+        ).toBe(false);
+    });
+
+    it("does not allow DISPATCHER any integration permissions (all Deny per 1.17.1 §4.4)", () => {
+        expect(
+            roleHasPermission(
+                "DISPATCHER",
+                PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "DISPATCHER",
+                PERMISSIONS.INTEGRATIONS_VIEW_HISTORY,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "DISPATCHER",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "DISPATCHER",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CREDENTIALS,
             ),
         ).toBe(false);
     });
@@ -366,6 +474,22 @@ describe("Aforden TECHNICIAN permissions", () => {
             ),
         ).toBe(false);
     });
+
+    it("does not allow TECHNICIAN any integration permissions", () => {
+        expect(
+            roleHasPermission(
+                "TECHNICIAN",
+                PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "TECHNICIAN",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+            ),
+        ).toBe(false);
+    });
 });
 
 describe("Aforden ACCOUNTANT permissions", () => {
@@ -410,6 +534,36 @@ describe("Aforden ACCOUNTANT permissions", () => {
             roleHasPermission(
                 "ACCOUNTANT",
                 PERMISSIONS.WORK_ORDERS_UPDATE,
+            ),
+        ).toBe(false);
+    });
+
+    it("allows ACCOUNTANT to view integration status, but not history, connection, or credentials (per 1.17.1 §4.4)", () => {
+        expect(
+            roleHasPermission(
+                "ACCOUNTANT",
+                PERMISSIONS.INTEGRATIONS_VIEW_STATUS,
+            ),
+        ).toBe(true);
+
+        expect(
+            roleHasPermission(
+                "ACCOUNTANT",
+                PERMISSIONS.INTEGRATIONS_VIEW_HISTORY,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "ACCOUNTANT",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CONNECTION,
+            ),
+        ).toBe(false);
+
+        expect(
+            roleHasPermission(
+                "ACCOUNTANT",
+                PERMISSIONS.INTEGRATIONS_MANAGE_CREDENTIALS,
             ),
         ).toBe(false);
     });

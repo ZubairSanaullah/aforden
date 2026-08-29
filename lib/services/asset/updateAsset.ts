@@ -12,6 +12,7 @@ import {
     DuplicateAssetNumberError,
 } from "./assetErrors";
 import { ForbiddenError } from "@/lib/services/authorization/authorizationErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { AssetDetailViewModel } from "./asset.types";
 
 /**
@@ -34,9 +35,10 @@ export async function updateAsset(
     workspaceId: string,
     assetId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<AssetDetailViewModel> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     assertPermission(
         authorization.membership.role,
@@ -262,7 +264,7 @@ export async function updateAsset(
                         workspaceId,
                         assetId: asset.id,
                         eventType: "UPDATED",
-                        actorUserId: authorization.user.id,
+                        actorUserId: authorization.user.id?.startsWith("api_app_") ? null : authorization.user.id,
                         actorRole: authorization.membership.role,
                         reason: "Asset properties updated",
                         metadata: { diff },

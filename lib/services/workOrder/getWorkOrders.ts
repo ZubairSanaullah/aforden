@@ -8,6 +8,7 @@ import {
 } from "@/lib/validations/workOrder";
 import { toWorkOrderReadModel } from "./getWorkOrder";
 import type { WorkOrderListResult } from "./workOrder.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -40,9 +41,10 @@ const sortFieldMap: Record<string, keyof Prisma.WorkOrderOrderByWithRelationInpu
 export async function getWorkOrders(
     workspaceId: string,
     queryInput: unknown = {},
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<WorkOrderListResult> {
     // --- 1. Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. RBAC: Enforce WORK_ORDERS_VIEW permission ---

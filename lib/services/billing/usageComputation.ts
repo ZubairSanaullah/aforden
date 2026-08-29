@@ -171,7 +171,8 @@ export async function computeCurrentUsage(
     case "FEATURE_CUSTOM_BRANDING":
     case "FEATURE_SMS_NOTIFICATIONS":
     case "FEATURE_INVENTORY_MULTI_WAREHOUSE":
-    case "FEATURE_API_ACCESS": {
+    case "FEATURE_API_ACCESS":
+    case "FEATURE_AUTOMATIONS": {
       throw new Error(
         `[computeCurrentUsage] Programming error: '${featureKey}' is a BOOLEAN entitlement key. ` +
           `computeCurrentUsage() must only be called for NUMERIC_LIMIT keys. ` +

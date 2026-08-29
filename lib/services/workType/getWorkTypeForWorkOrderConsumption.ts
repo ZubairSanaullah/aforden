@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAuthorization } from "@/lib/services/authorization/workspaceAuthorization";
 import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import {
     WorkTypeNotFoundError,
     WorkTypeUnavailableForWorkOrderError,
@@ -23,9 +24,10 @@ import type { WorkTypeWorkOrderConsumptionModel } from "./workType.types";
 export async function getWorkTypeForWorkOrderConsumption(
     workspaceId: string,
     workTypeId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<WorkTypeWorkOrderConsumptionModel> {
     // --- 1. Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce SERVICE_CATALOG_VIEW permission ---
     assertPermission(

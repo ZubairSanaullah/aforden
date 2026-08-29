@@ -10,6 +10,7 @@ import type {
     TechnicianDirectoryItem,
     TechnicianDirectoryResult,
 } from "./technicianDirectory.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -27,12 +28,13 @@ import type { Prisma } from "@/generated/prisma/client";
 export async function getTechnicians(
     workspaceId: string,
     options?: GetTechniciansQueryInput,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<TechnicianDirectoryResult> {
     // --- Validate Query Options ---
     const query = getTechniciansQuerySchema.parse(options ?? {});
 
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce MEMBERS_VIEW permission ---
     assertPermission(

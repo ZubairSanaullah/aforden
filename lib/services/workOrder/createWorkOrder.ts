@@ -104,6 +104,7 @@ export async function createWorkOrder(
     const workTypeSnapshot = await getWorkTypeForWorkOrderConsumption(
         workspaceId,
         data.workTypeId,
+        authorization,
     );
 
     // --- 6.5. Optional Asset Resolution & Consistency Checks (§9.2 & §17.3) ---
@@ -220,13 +221,14 @@ export async function createWorkOrder(
                 });
 
                 if (tx.workOrderHistory?.create) {
+                    const isRealMember = !authorization.membership.id.startsWith("api_");
                     await tx.workOrderHistory.create({
                         data: {
                             workspaceId,
                             workOrderId: wo.id,
                             eventType: "CREATED",
-                            actorMemberId: authorization.membership.id,
-                            actorName: authorization.user.name || authorization.user.email,
+                            actorMemberId: isRealMember ? authorization.membership.id : null,
+                            actorName: authorization.user.name || authorization.user.email || "Public API Application",
                             newValue: wo.workOrderNumber,
                             metadata: JSON.stringify({
                                 title: wo.title,

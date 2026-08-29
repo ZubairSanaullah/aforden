@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { getPartsQuerySchema } from "./part.schemas";
 import type { PartListResult, PartDetailViewModel } from "./part.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 
 /**
  * Retrieves a paginated, filterable, searchable list of Parts in the authorized workspace.
@@ -18,9 +19,10 @@ import type { PartListResult, PartDetailViewModel } from "./part.types";
 export async function getParts(
     workspaceId: string,
     rawQuery?: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<PartListResult> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce PARTS_VIEW permission ---
     assertPermission(

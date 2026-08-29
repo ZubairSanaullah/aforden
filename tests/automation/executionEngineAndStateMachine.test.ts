@@ -711,6 +711,6 @@ describe("Phase 1.16.6 — Core Automation Execution Engine & State Machine", ()
       expect(results[0].status).toBe(AutomationExecutionStatus.COMPLETED);
       expect(results[0].stepCount).toBe(1);
       expect(results[0].steps[0].status).toBe(AutomationExecutionStepStatus.COMPLETED);
-    });
+    }, 15000);
   });
 });

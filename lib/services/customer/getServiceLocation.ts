@@ -3,6 +3,7 @@ import { requireWorkspaceAuthorization } from "@/lib/services/authorization/work
 import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { CustomerNotFoundError } from "./customerErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { ServiceLocation } from "@/generated/prisma/client";
 
 /**
@@ -20,9 +21,10 @@ export async function getServiceLocation(
     workspaceId: string,
     customerId: string,
     locationId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<ServiceLocation | null> {
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_VIEW permission ---
     assertPermission(

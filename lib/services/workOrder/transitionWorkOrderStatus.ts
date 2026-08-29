@@ -73,16 +73,27 @@ function isMatrixTransitionAllowed(
  *   9. Calculate side effects (timestamps, reasons, unassign reset, hold clear).
  *   10. Persist single-row update via `prisma.workOrder.update` and return `WorkOrderReadModel`.
  */
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
+
 export async function transitionWorkOrderStatus(
     workspaceId: string,
     workOrderId: string,
     input: unknown,
+    actorOrTx?: WorkspaceAuthorizationContext | any,
     txClient?: any,
 ): Promise<WorkOrderReadModel & { _historyRecordId?: string }> {
-    const db = txClient ?? prisma;
+    let actor: WorkspaceAuthorizationContext | undefined;
+    let db: any = prisma;
+
+    if (actorOrTx && typeof actorOrTx === "object" && "membership" in actorOrTx) {
+        actor = actorOrTx;
+        db = txClient ?? prisma;
+    } else if (actorOrTx) {
+        db = actorOrTx;
+    }
 
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. Immediate Role Guard (Read-only / Audit roles) ---

@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { PartNotFoundError } from "./partErrors";
 import type { PartDetailViewModel } from "./part.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 
 /**
  * Retrieves a single Part from the catalog by ID within an authorized workspace.
@@ -17,9 +18,10 @@ import type { PartDetailViewModel } from "./part.types";
 export async function getPart(
     workspaceId: string,
     partId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<PartDetailViewModel> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 2. RBAC: Enforce PARTS_VIEW permission ---
     assertPermission(

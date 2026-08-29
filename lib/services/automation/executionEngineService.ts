@@ -75,16 +75,16 @@ async function executeWithTimeout<T>(
  * @param currentRuleId - The rule ID of the parent action triggering downstream work
  */
 export function computeChildExecutionMetadata(
-  context: ActionExecutionContext | Record<string, unknown>,
+  context: ActionExecutionContext | ChildExecutionMetadata | Record<string, unknown>,
   currentRuleId: string,
 ): ChildExecutionMetadata {
   const currentDepth = typeof context.executionDepth === "number" ? context.executionDepth : 0;
   const currentChain = Array.isArray(context.causalityChain) ? context.causalityChain : [];
   const parentExecId =
-    (context.executionId as string) ||
-    (context.parentExecutionId as string) ||
+    ((context as any).executionId as string) ||
+    ((context as any).parentExecutionId as string) ||
     "";
-  const correlationId = (context.correlationId as string) || randomUUID();
+  const correlationId = ((context as any).correlationId as string) || randomUUID();
 
   return {
     parentExecutionId: parentExecId,
@@ -156,7 +156,7 @@ export async function executeAutomationPipeline(
   }
 
   // 2. Terminal State Guard (Invariant 4: Append-Only Immutable History)
-  const terminalStatuses = [
+  const terminalStatuses: AutomationExecutionStatus[] = [
     AutomationExecutionStatus.COMPLETED,
     AutomationExecutionStatus.FAILED,
     AutomationExecutionStatus.SKIPPED,

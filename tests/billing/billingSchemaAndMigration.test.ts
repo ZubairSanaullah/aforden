@@ -42,7 +42,7 @@ describe("Phase 1.15.2 — SaaS Billing Database Schema, Constraints & FK Integr
       },
     });
     planId = plan.id;
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (prisma) {

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAuthorization } from "@/lib/services/authorization/workspaceAuthorization";
 import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Customer } from "@/generated/prisma/client";
 
 /**
@@ -16,9 +17,10 @@ import type { Customer } from "@/generated/prisma/client";
 export async function getCustomer(
     workspaceId: string,
     customerId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<Customer | null> {
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce CUSTOMERS_VIEW permission ---
     assertPermission(

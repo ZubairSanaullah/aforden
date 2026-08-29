@@ -3,6 +3,7 @@ import { requireWorkspaceAuthorization } from "@/lib/services/authorization/work
 import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import { WorkOrderNotFoundError } from "./workOrderErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { WorkOrderReadModel } from "./workOrder.types";
 import type {
     Customer,
@@ -86,9 +87,10 @@ export function toWorkOrderReadModel(record: WorkOrderWithRelations): WorkOrderR
 export async function getWorkOrder(
     workspaceId: string,
     workOrderId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<WorkOrderReadModel> {
     // --- 1. Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. RBAC: Enforce WORK_ORDERS_VIEW permission ---

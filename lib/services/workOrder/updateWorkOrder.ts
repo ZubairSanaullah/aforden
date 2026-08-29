@@ -14,6 +14,7 @@ import {
     AssetNotFoundError,
     AssetImmutableError,
 } from "@/lib/services/asset/assetErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { WorkOrderReadModel } from "./workOrder.types";
 import type {
     Customer,
@@ -84,9 +85,9 @@ function toWorkOrderReadModel(updated: WorkOrderWithRelations): WorkOrderReadMod
 }
 
 /**
- * Updates mutable operational fields of an existing WorkOrder within an authorized workspace.
+ * Updates mutable fields on an existing WorkOrder within an authorized workspace.
  *
- * Locked Execution Order (Phase 1.6.7 & 1.7.7):
+ * Sequence of operations & invariants:
  *   1. Authenticate & Authorize Workspace Context (`requireWorkspaceAuthorization`).
  *   2. RBAC Permission Assertion (`assertPermission(role, PERMISSIONS.WORK_ORDERS_UPDATE)`).
  *   3. Validate Input Payload (`updateWorkOrderSchema.parse(input)`).
@@ -109,9 +110,10 @@ export async function updateWorkOrder(
     workspaceId: string,
     workOrderId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<WorkOrderReadModel> {
     // --- 1. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
     const role = authorization.membership.role;
 
     // --- 2. RBAC Permission Check (OWNER, ADMIN, MANAGER, DISPATCHER, TECHNICIAN) ---
@@ -258,14 +260,15 @@ export async function updateWorkOrder(
         }
 
         if (tx.workOrderHistory?.create) {
+            const isRealMember = !authorization.membership.id.startsWith("api_");
             for (const change of changes) {
                 await tx.workOrderHistory.create({
                     data: {
                         workspaceId,
                         workOrderId,
                         eventType: "UPDATED",
-                        actorMemberId: authorization.membership.id,
-                        actorName: authorization.user.name || authorization.user.email,
+                        actorMemberId: isRealMember ? authorization.membership.id : null,
+                        actorName: authorization.user.name || authorization.user.email || "Public API Application",
                         field: change.field,
                         oldValue: change.oldValue,
                         newValue: change.newValue,

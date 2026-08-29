@@ -47,6 +47,12 @@ export const PERMISSIONS = {
     // Billing
     BILLING_VIEW: "billing.view",
     BILLING_MANAGE: "billing.manage",
+
+    // Integrations
+    INTEGRATIONS_VIEW_STATUS: "integration.view_status",
+    INTEGRATIONS_MANAGE_CONNECTION: "integration.manage_connection",
+    INTEGRATIONS_MANAGE_CREDENTIALS: "integration.manage_credentials",
+    INTEGRATIONS_VIEW_HISTORY: "integration.view_history",
 } as const;
 
 /**

@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/services/authorization/permissions";
 import { assertPermission } from "@/lib/services/authorization/permissionService";
 import type { AvailabilityDay } from "@/generated/prisma/client";
 import type { TechnicianProfileOverview } from "./technicianProfileOverview.types";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 
 const DAY_ORDER: Record<AvailabilityDay, number> = {
     MONDAY: 1,
@@ -31,9 +32,10 @@ const DAY_ORDER: Record<AvailabilityDay, number> = {
 export async function getTechnicianProfileOverview(
     workspaceId: string,
     technicianProfileId: string,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<TechnicianProfileOverview | null> {
     // --- Authentication & Workspace Authorization ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- RBAC: Enforce MEMBERS_VIEW permission ---
     assertPermission(

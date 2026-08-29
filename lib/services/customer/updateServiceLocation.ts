@@ -10,6 +10,7 @@ import {
     ServiceLocationPrimaryExistsError,
     ServiceLocationUpdateError,
 } from "./customerErrors";
+import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import { Prisma, type ServiceLocation } from "@/generated/prisma/client";
 
 /**
@@ -31,12 +32,13 @@ export async function updateServiceLocation(
     customerId: string,
     locationId: string,
     input: unknown,
+    actor?: WorkspaceAuthorizationContext,
 ): Promise<ServiceLocation> {
     // --- 1. Validate Input Payload ---
     const validated = updateServiceLocationSchema.parse(input);
 
     // --- 2. Authenticate & Authorize Workspace Context ---
-    const authorization = await requireWorkspaceAuthorization(workspaceId);
+    const authorization = actor ?? (await requireWorkspaceAuthorization(workspaceId));
 
     // --- 3. RBAC: Enforce CUSTOMERS_UPDATE permission ---
     assertPermission(
