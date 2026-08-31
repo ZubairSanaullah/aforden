@@ -14,6 +14,12 @@ import {
     emitNotificationEvent,
     NotificationEventType,
 } from "@/lib/services/notification";
+import {
+    enqueueWebhookDelivery,
+    triggerWebhookDeliveries,
+    PUBLIC_WEBHOOK_EVENTS,
+} from "@/lib/publicApi/webhooks";
+
 
 /**
  * Validates whether a (fromStatus, toStatus) pair exists in the locked
@@ -378,9 +384,31 @@ export async function transitionWorkOrderStatus(
             });
         }
 
+        // Enqueue Webhook Deliveries inside the same atomic database transaction
+        const statusWebhookDeliveryIds = await enqueueWebhookDelivery(
+            tx,
+            workspaceId,
+            PUBLIC_WEBHOOK_EVENTS.WORK_ORDER_STATUS_CHANGED,
+            wo,
+        );
+
+        const completedWebhookDeliveryIds =
+            toStatus === "COMPLETED"
+                ? await enqueueWebhookDelivery(
+                      tx,
+                      workspaceId,
+                      PUBLIC_WEBHOOK_EVENTS.WORK_ORDER_COMPLETED,
+                      wo,
+                  )
+                : [];
+
         return {
             wo,
             historyRecordId: createdHistory?.id,
+            webhookDeliveryIds: [
+                ...statusWebhookDeliveryIds,
+                ...completedWebhookDeliveryIds,
+            ],
         };
     };
 
@@ -399,7 +427,7 @@ export async function transitionWorkOrderStatus(
         .filter(Boolean)
         .join(", ");
 
-    return {
+    const result: WorkOrderReadModel & { _historyRecordId?: string } = {
         id: updated.wo.id,
         workspaceId: updated.wo.workspaceId,
         workOrderNumber: updated.wo.workOrderNumber,
@@ -438,4 +466,9 @@ export async function transitionWorkOrderStatus(
 
         _historyRecordId: updated.historyRecordId,
     };
+
+    // Trigger background asynchronous delivery strictly POST-COMMIT (only after tx is committed)
+    triggerWebhookDeliveries(updated.webhookDeliveryIds);
+
+    return result;
 }

@@ -314,10 +314,11 @@ describe("Phase 1.4.23 — Customer / Location Integration Validation Suite", ()
             id: userId,
             name,
             email: `${userId}@example.com`,
+        platformRole: null,
             passwordHash: "hashed-pwd",
-            emailVerified: new Date(),
+        emailVerified: new Date(),
             avatarUrl: null,
-            status: "ACTIVE",
+        status: "ACTIVE",
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

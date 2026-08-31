@@ -70,7 +70,14 @@ describe("Phase 1.13.4 — Recipient Resolution Engine & Notification Preference
                     status: "ACTIVE",
                 },
                 include: {
-                    user: true,
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            status: true,
+                        },
+                    },
                     employee: true,
                 },
             });

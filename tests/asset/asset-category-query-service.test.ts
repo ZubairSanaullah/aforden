@@ -51,6 +51,7 @@ describe("Phase 1.7.8 — AssetCategory Directory & Query Suite", () => {
         id: "usr_adm_cat_query",
         name: "Admin Category Query",
         email: "admin@catquery.com",
+        platformRole: null,
         emailVerified: new Date(),
         passwordHash: "hash",
         avatarUrl: null,

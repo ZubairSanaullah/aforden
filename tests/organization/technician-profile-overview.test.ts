@@ -116,10 +116,11 @@ describe("Phase 1.3.13 — Technician Profile Aggregation & Read Model", () => {
             id: userId,
             name,
             email: `${userId}@example.com`,
+        platformRole: null,
             passwordHash: "hashed-pwd-secret",
-            emailVerified: new Date(),
+        emailVerified: new Date(),
             avatarUrl: null,
-            status: status as any,
+        status: status as any,
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

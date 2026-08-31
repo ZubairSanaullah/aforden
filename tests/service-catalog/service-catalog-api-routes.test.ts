@@ -292,10 +292,11 @@ describe("Phase 1.5.6 — Service Catalog API Routes Suite", () => {
             id: userId,
             name,
             email: `${userId}@example.com`,
+        platformRole: null,
             passwordHash: "hashed-pwd",
-            emailVerified: new Date(),
+        emailVerified: new Date(),
             avatarUrl: null,
-            status: status as any,
+        status: status as any,
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

@@ -11,6 +11,8 @@ import type {
 } from "@/generated/prisma/client";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
 
+export type UserSummary = Pick<User, "id" | "name" | "email" | "avatarUrl">;
+
 export type ScheduleAppointmentWithRelations = ScheduleAppointment & {
     workOrder: WorkOrder & {
         customer: Customer;
@@ -20,8 +22,8 @@ export type ScheduleAppointmentWithRelations = ScheduleAppointment & {
     technician: TechnicianProfile & {
         employee: Employee;
     };
-    dispatchedByMember?: (WorkspaceMember & { user?: User | null }) | null;
-    undispatchedByMember?: (WorkspaceMember & { user?: User | null }) | null;
+    dispatchedByMember?: (WorkspaceMember & { user?: UserSummary | null }) | null;
+    undispatchedByMember?: (WorkspaceMember & { user?: UserSummary | null }) | null;
 };
 
 export const SCHEDULE_APPOINTMENT_INCLUDE = {
@@ -39,12 +41,26 @@ export const SCHEDULE_APPOINTMENT_INCLUDE = {
     },
     dispatchedByMember: {
         include: {
-            user: true,
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarUrl: true,
+                },
+            },
         },
     },
     undispatchedByMember: {
         include: {
-            user: true,
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarUrl: true,
+                },
+            },
         },
     },
 } as const;

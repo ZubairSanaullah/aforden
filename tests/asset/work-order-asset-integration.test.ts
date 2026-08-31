@@ -109,6 +109,7 @@ describe("Phase 1.7.7 — WorkOrder <-> Asset Integration Tests", () => {
         id: "usr_admin_wo_asset",
         name: "Admin WO Asset",
         email: "admin@woasset.com",
+        platformRole: null,
         emailVerified: new Date(),
         passwordHash: "hash",
         avatarUrl: null,

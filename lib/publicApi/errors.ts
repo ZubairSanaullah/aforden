@@ -30,6 +30,21 @@ export const PUBLIC_ERROR_STATUS_MAP: Record<PublicErrorCode, number> = {
     INTERNAL_SERVER_ERROR: 500,
 };
 
+export const STATUS_TO_PUBLIC_ERROR_MAP: Record<number, PublicErrorCode> = {
+    400: "VALIDATION_ERROR",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    409: "CONFLICT",
+    422: "VALIDATION_ERROR",
+    429: "RATE_LIMITED",
+    500: "INTERNAL_SERVER_ERROR",
+    502: "INTERNAL_SERVER_ERROR",
+    503: "INTERNAL_SERVER_ERROR",
+    504: "INTERNAL_SERVER_ERROR",
+};
+
+
 export interface PublicErrorDetail {
     field?: string;
     issue: string;

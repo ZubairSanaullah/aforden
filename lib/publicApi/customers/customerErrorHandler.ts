@@ -107,26 +107,6 @@ export function handleCustomerPublicApiError(
         });
     }
 
-    if (
-        error instanceof CustomerCreationError ||
-        error instanceof CustomerUpdateError ||
-        error instanceof ServiceLocationCreationError ||
-        error instanceof ServiceLocationUpdateError
-    ) {
-        return jsonError("INTERNAL_SERVER_ERROR", error.message, {
-            status: 500,
-            requestId,
-        });
-    }
-
-    // Default unhandled error translation
-    const message =
-        error instanceof Error
-            ? error.message
-            : "An unexpected error occurred while processing the customer request.";
-
-    return jsonError("INTERNAL_SERVER_ERROR", message, {
-        status: 500,
-        requestId,
-    });
+    // Unhandled / server errors fall through to global envelope handler
+    throw error;
 }

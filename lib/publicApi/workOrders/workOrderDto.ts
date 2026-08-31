@@ -10,6 +10,28 @@ import type { WorkOrderReadModel } from "@/lib/services/workOrder";
  *   Denormalized joined UI fields from internal read projection; REST contract exposes normalized entity foreign keys.
  * - Soft-delete flags / internal database tombstone attributes.
  */
+export const APPROVED_PUBLIC_WORK_ORDER_DTO_KEYS = [
+    "id",
+    "workOrderNumber",
+    "status",
+    "priority",
+    "title",
+    "description",
+    "customerId",
+    "locationId",
+    "workTypeId",
+    "assignedTechnicianId",
+    "assetId",
+    "estimatedDuration",
+    "holdReason",
+    "cancellationReason",
+    "startedAt",
+    "completedAt",
+    "cancelledAt",
+    "createdAt",
+    "updatedAt",
+] as const;
+
 export interface PublicWorkOrderDto {
     id: string;
     workOrderNumber: string;

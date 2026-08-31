@@ -50,7 +50,14 @@ export async function resolveRecipientDestination(
                     status: "ACTIVE",
                 },
                 include: {
-                    user: true,
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            status: true,
+                        },
+                    },
                     employee: true,
                 },
             });

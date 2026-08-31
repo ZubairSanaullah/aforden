@@ -1,6 +1,7 @@
 import {
     jsonSuccess,
     withPublicApiAuth,
+    withIdempotency,
     getAuthenticatedWorkspaceId,
     withTenantScope,
     PUBLIC_API_SCOPES,
@@ -63,7 +64,7 @@ export const GET = withPublicApiAuth(
  * Requires `customers:write` scope.
  */
 export const PATCH = withPublicApiAuth(
-    async (request: Request, context: RouteContext) => {
+    withIdempotency(async (request: Request, context: RouteContext) => {
         try {
             const params = await context.params;
             const customerId = params.id;
@@ -93,7 +94,7 @@ export const PATCH = withPublicApiAuth(
         } catch (error) {
             return handleCustomerPublicApiError(error);
         }
-    },
+    }),
     {
         requiredScopes: [PUBLIC_API_SCOPES.CUSTOMERS_WRITE],
     },

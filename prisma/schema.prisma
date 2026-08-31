@@ -30,6 +30,21 @@ enum UserStatus {
   DEACTIVATED
 }
 
+enum PlatformRole {
+  PLATFORM_OWNER
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+  PLATFORM_OPERATIONS
+  PLATFORM_SECURITY
+  PLATFORM_BILLING
+}
+
+enum PlatformAdminStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 enum OrganizationStatus {
   ACTIVE
   INACTIVE
@@ -425,20 +440,67 @@ model User {
   emailVerified DateTime?
   avatarUrl     String?
   status        UserStatus @default(PENDING)
+  platformRole  PlatformRole?
 
-  memberships     WorkspaceMember[]
-  accounts        Account[]
-  sessions        Session[]
-  passwordResets  PasswordResetToken[]
-  sentInvitations WorkspaceInvitation[]
-  assetHistories  AssetHistory[]
+  memberships                  WorkspaceMember[]
+  accounts                     Account[]
+  sessions                     Session[]
+  passwordResets               PasswordResetToken[]
+  sentInvitations              WorkspaceInvitation[]
+  assetHistories               AssetHistory[]
   createdDeveloperApplications DeveloperApplication[] @relation("CreatedDeveloperApplications")
+  platformAdminProfile         PlatformAdminProfile?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([email])
   @@index([status])
+  @@index([platformRole])
+}
+
+model PlatformAdminProfile {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+  status            PlatformAdminStatus @default(ACTIVE)
+  lastActiveAt      DateTime?
+  lastLoginAt       DateTime?
+  stepUpConfirmedAt DateTime?
+  metadata          Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([lastActiveAt])
+}
+
+model PlatformAuditLog {
+  id            String       @id @default(cuid())
+  actorUserId   String
+  actorEmail    String
+  actorRole     PlatformRole
+  action        String       @db.VarChar(128)
+  targetType    String       @db.VarChar(64)
+  targetId      String       @db.VarChar(128)
+  workspaceId   String?
+  requestId     String       @db.VarChar(64)
+  ipAddress     String       @db.VarChar(64)
+  userAgent     String?      @db.VarChar(512)
+  reason        String?      @db.Text
+  previousState Json?
+  newState      Json?
+  metadata      Json?
+  createdAt     DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@index([workspaceId, createdAt])
+  @@index([requestId])
 }
 
 model Workspace {
@@ -507,6 +569,10 @@ model Workspace {
   activeExclusiveCapabilities   WorkspaceActiveExclusiveCapability[]
   integrationSetting            WorkspaceIntegrationSetting?
   developerApplications         DeveloperApplication[]
+  apiIdempotencyRecords         ApiIdempotencyRecord[]
+  apiRequestLogs                ApiRequestLog[]
+  webhookEndpoints              WebhookEndpoint[]
+  webhookDeliveries             WebhookDelivery[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2737,6 +2803,7 @@ model DeveloperApplication {
   workspace       Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdByUser   User                       @relation("CreatedDeveloperApplications", fields: [createdByUserId], references: [id], onDelete: Restrict)
   apiKeys         ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -2759,9 +2826,132 @@ model ApiKey {
   updatedAt              DateTime          @updatedAt
 
   developerApplication   DeveloperApplication @relation(fields: [developerApplicationId], references: [id], onDelete: Cascade)
+  apiIdempotencyRecords  ApiIdempotencyRecord[]
+  apiRequestLogs         ApiRequestLog[]
 
   @@index([developerApplicationId])
   @@index([developerApplicationId, status])
   @@index([status, expiresAt])
 }
+
+enum ApiIdempotencyStatus {
+  PENDING
+  RESOLVED
+  FAILED
+}
+
+model ApiIdempotencyRecord {
+  id              String               @id @default(cuid())
+  workspaceId     String
+  apiKeyId        String
+  endpoint        String               @db.VarChar(255)
+  idempotencyKey  String               @db.VarChar(255)
+  scopedKeyHash   String               @unique @db.VarChar(64)
+  requestHash     String               @db.VarChar(64)
+  status          ApiIdempotencyStatus @default(PENDING)
+  responseStatus  Int?
+  responseBody    Json?
+  responseHeaders Json?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  expiresAt       DateTime
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  apiKey          ApiKey               @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, apiKeyId, endpoint, idempotencyKey])
+  @@index([workspaceId, createdAt])
+  @@index([apiKeyId, createdAt])
+  @@index([expiresAt])
+}
+
+model ApiRequestLog {
+  id                     String    @id @default(cuid())
+  workspaceId            String
+  apiKeyId               String?
+  developerApplicationId String?
+  requestId              String    @db.VarChar(64)
+  endpoint               String    @db.VarChar(255)
+  method                 String    @db.VarChar(16)
+  statusCode             Int
+  durationMs             Int
+  ipHash                 String?   @db.VarChar(64)
+  userAgent              String?   @db.VarChar(512)
+  apiVersion             String    @default("v1") @db.VarChar(16)
+  rateLimitTier          String?   @db.VarChar(32)
+  errorCode              String?   @db.VarChar(64)
+  createdAt              DateTime  @default(now())
+
+  workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  apiKey                 ApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, apiKeyId, createdAt])
+  @@index([workspaceId, statusCode])
+  @@index([requestId])
+}
+
+enum WebhookEndpointStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETRYING
+}
+
+model WebhookEndpoint {
+  id                     String                @id @default(cuid())
+  workspaceId            String
+  developerApplicationId String
+  url                    String                @db.VarChar(1024)
+  description            String?               @db.VarChar(255)
+  status                 WebhookEndpointStatus @default(ACTIVE)
+  events                 String[]
+  secret                 String                @db.VarChar(255)
+  metadata               Json?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  workspace              Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  developerApplication   DeveloperApplication  @relation(fields: [developerApplicationId], references: [id], onDelete: Cascade)
+  deliveries             WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@index([developerApplicationId])
+  @@index([developerApplicationId, status])
+}
+
+model WebhookDelivery {
+  id                String                @id @default(cuid())
+  workspaceId       String
+  webhookEndpointId String
+  eventId           String                @db.VarChar(64)
+  eventType         String                @db.VarChar(64)
+  payload           Json
+  status            WebhookDeliveryStatus @default(PENDING)
+  attempts          Int                   @default(0)
+  responseStatus    Int?
+  responseBody      String?               @db.Text
+  durationMs        Int?
+  nextRetryAt       DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhookEndpoint   WebhookEndpoint       @relation(fields: [webhookEndpointId], references: [id], onDelete: Cascade)
+
+  @@index([webhookEndpointId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([status, nextRetryAt])
+  @@index([eventId])
+}
+
+
+
 

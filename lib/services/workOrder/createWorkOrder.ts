@@ -24,6 +24,11 @@ import {
     NotificationEventType,
 } from "@/lib/services/notification";
 import { assertEntitlement } from "@/lib/services/billing/entitlementResolver";
+import {
+    enqueueWebhookDelivery,
+    triggerWebhookDeliveries,
+    PUBLIC_WEBHOOK_EVENTS,
+} from "@/lib/publicApi/webhooks";
 
 const MAX_NUMBER_GENERATION_ATTEMPTS = 3;
 
@@ -260,57 +265,73 @@ export async function createWorkOrder(
                     },
                 });
 
-                return wo;
+                // Enqueue Webhook Delivery inside the same atomic database transaction
+                const webhookDeliveryIds = await enqueueWebhookDelivery(
+                    tx,
+                    workspaceId,
+                    PUBLIC_WEBHOOK_EVENTS.WORK_ORDER_CREATED,
+                    wo,
+                );
+
+                return {
+                    wo,
+                    webhookDeliveryIds,
+                };
             });
 
             const locationAddress = [
-                created.location.addressLine1,
-                created.location.addressLine2,
-                created.location.city,
-                created.location.state,
-                created.location.postalCode,
-                created.location.country,
+                created.wo.location.addressLine1,
+                created.wo.location.addressLine2,
+                created.wo.location.city,
+                created.wo.location.state,
+                created.wo.location.postalCode,
+                created.wo.location.country,
             ]
                 .filter(Boolean)
                 .join(", ");
 
-            return {
-                id: created.id,
-                workspaceId: created.workspaceId,
-                workOrderNumber: created.workOrderNumber,
+            const result: WorkOrderReadModel = {
+                id: created.wo.id,
+                workspaceId: created.wo.workspaceId,
+                workOrderNumber: created.wo.workOrderNumber,
 
-                customerId: created.customerId,
-                customerName: created.customer.name,
-                customerNumber: created.customer.customerNumber,
+                customerId: created.wo.customerId,
+                customerName: created.wo.customer.name,
+                customerNumber: created.wo.customer.customerNumber,
 
-                locationId: created.locationId,
-                locationName: created.location.name,
+                locationId: created.wo.locationId,
+                locationName: created.wo.location.name,
                 locationAddress,
 
-                workTypeId: created.workTypeId,
-                workTypeName: created.workTypeName,
-                workTypeCode: created.workTypeCode,
-                estimatedDuration: created.estimatedDuration,
+                workTypeId: created.wo.workTypeId,
+                workTypeName: created.wo.workTypeName,
+                workTypeCode: created.wo.workTypeCode,
+                estimatedDuration: created.wo.estimatedDuration,
 
-                assignedTechnicianId: created.assignedTechnicianId,
-                assetId: created.assetId ?? null,
+                assignedTechnicianId: created.wo.assignedTechnicianId,
+                assetId: created.wo.assetId ?? null,
 
-                status: created.status,
-                priority: created.priority,
+                status: created.wo.status,
+                priority: created.wo.priority,
 
-                title: created.title,
-                description: created.description,
-                internalNotes: created.internalNotes,
-                holdReason: created.holdReason,
-                cancellationReason: created.cancellationReason,
+                title: created.wo.title,
+                description: created.wo.description,
+                internalNotes: created.wo.internalNotes,
+                holdReason: created.wo.holdReason,
+                cancellationReason: created.wo.cancellationReason,
 
-                startedAt: created.startedAt,
-                completedAt: created.completedAt,
-                cancelledAt: created.cancelledAt,
+                startedAt: created.wo.startedAt,
+                completedAt: created.wo.completedAt,
+                cancelledAt: created.wo.cancelledAt,
 
-                createdAt: created.createdAt,
-                updatedAt: created.updatedAt,
+                createdAt: created.wo.createdAt,
+                updatedAt: created.wo.updatedAt,
             };
+
+            // Trigger background asynchronous delivery strictly POST-COMMIT (only after tx is committed)
+            triggerWebhookDeliveries(created.webhookDeliveryIds);
+
+            return result;
         } catch (error: any) {
             const isUniqueCollision =
                 error?.code === "P2002" ||

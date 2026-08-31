@@ -168,6 +168,7 @@ export function jsonError(
     const headers = new Headers(options?.headers);
     headers.set(REQUEST_ID_HEADER_NAME, requestId);
     headers.set("Content-Type", "application/json");
+    headers.set("X-Aforden-Error-Code", code);
 
     return NextResponse.json(envelope, {
         status,

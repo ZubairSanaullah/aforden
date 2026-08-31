@@ -9,6 +9,11 @@ import {
 } from "./customerErrors";
 import type { WorkspaceAuthorizationContext } from "@/lib/services/authorization/types";
 import type { Customer } from "@/generated/prisma/client";
+import {
+    enqueueWebhookDelivery,
+    triggerWebhookDeliveries,
+    PUBLIC_WEBHOOK_EVENTS,
+} from "@/lib/publicApi/webhooks";
 
 const CUSTOMER_NUMBER_PREFIX = "CUST-";
 const MAX_AUTO_GENERATE_ATTEMPTS = 5;
@@ -17,8 +22,8 @@ const MAX_AUTO_GENERATE_ATTEMPTS = 5;
  * Resolves the next sequential customer number within a specific workspace.
  * Queries the highest existing customer number starting with "CUST-" in that workspace.
  */
-async function getNextCustomerNumber(workspaceId: string): Promise<string> {
-    const latest = await prisma.customer.findFirst({
+async function getNextCustomerNumber(db: any, workspaceId: string): Promise<string> {
+    const latest = await db.customer.findFirst({
         where: {
             workspaceId,
             customerNumber: {
@@ -65,6 +70,7 @@ export async function createCustomer(
     workspaceId: string,
     input: unknown,
     actor?: WorkspaceAuthorizationContext,
+    txClient?: any,
 ): Promise<Customer> {
     // --- Validate Input ---
     const data = createCustomerSchema.parse(input);
@@ -79,10 +85,11 @@ export async function createCustomer(
     );
 
     const isExplicitCustomerNumber = Boolean(data.customerNumber);
+    const initialDb = txClient ?? prisma;
 
     // --- Explicit Customer Number Pre-check ---
     if (isExplicitCustomerNumber && data.customerNumber) {
-        const existing = await prisma.customer.findUnique({
+        const existing = await initialDb.customer.findUnique({
             where: {
                 workspaceId_customerNumber: {
                     workspaceId,
@@ -98,29 +105,53 @@ export async function createCustomer(
 
     // --- Persistence with Concurrency-Safe Generation ---
     for (let attempt = 0; attempt < MAX_AUTO_GENERATE_ATTEMPTS; attempt++) {
-        const resolvedCustomerNumber = isExplicitCustomerNumber
-            ? (data.customerNumber as string)
-            : await getNextCustomerNumber(workspaceId);
-
         try {
-            const customer = await prisma.customer.create({
-                data: {
+            const runTx = txClient
+                ? async (cb: (tx: any) => Promise<any>) => cb(txClient)
+                : (typeof prisma.$transaction === "function"
+                    ? (cb: (tx: any) => Promise<any>) => prisma.$transaction(cb)
+                    : async (cb: (tx: any) => Promise<any>) => cb(prisma));
+
+            const { customer, webhookDeliveryIds } = await runTx(async (tx) => {
+                const resolvedCustomerNumber = isExplicitCustomerNumber
+                    ? (data.customerNumber as string)
+                    : await getNextCustomerNumber(tx, workspaceId);
+
+                const created = await tx.customer.create({
+                    data: {
+                        workspaceId,
+                        customerNumber: resolvedCustomerNumber,
+                        name: data.name,
+                        email: data.email ?? null,
+                        phone: data.phone ?? null,
+                        website: data.website ?? null,
+                        addressLine1: data.addressLine1 ?? null,
+                        addressLine2: data.addressLine2 ?? null,
+                        city: data.city ?? null,
+                        state: data.state ?? null,
+                        postalCode: data.postalCode ?? null,
+                        country: data.country ?? null,
+                        status: data.status,
+                        notes: data.notes ?? null,
+                    },
+                });
+
+                // Enqueue Webhook Delivery in the same transaction
+                const deliveryIds = await enqueueWebhookDelivery(
+                    tx,
                     workspaceId,
-                    customerNumber: resolvedCustomerNumber,
-                    name: data.name,
-                    email: data.email ?? null,
-                    phone: data.phone ?? null,
-                    website: data.website ?? null,
-                    addressLine1: data.addressLine1 ?? null,
-                    addressLine2: data.addressLine2 ?? null,
-                    city: data.city ?? null,
-                    state: data.state ?? null,
-                    postalCode: data.postalCode ?? null,
-                    country: data.country ?? null,
-                    status: data.status,
-                    notes: data.notes ?? null,
-                },
+                    PUBLIC_WEBHOOK_EVENTS.CUSTOMER_CREATED,
+                    created,
+                );
+
+                return {
+                    customer: created,
+                    webhookDeliveryIds: deliveryIds,
+                };
             });
+
+            // Trigger background delivery strictly POST-COMMIT
+            triggerWebhookDeliveries(webhookDeliveryIds);
 
             return customer;
         } catch (error: any) {

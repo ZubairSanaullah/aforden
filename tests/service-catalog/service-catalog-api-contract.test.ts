@@ -296,10 +296,11 @@ describe("Phase 1.5.7 — Service Catalog HTTP API Contract Verification", () =>
             id: userId,
             name,
             email: `${userId}@example.com`,
+        platformRole: null,
             passwordHash: "hashed-pwd",
-            emailVerified: new Date(),
+        emailVerified: new Date(),
             avatarUrl: null,
-            status: "ACTIVE" as any,
+        status: "ACTIVE" as any,
             createdAt: new Date("2026-08-19T00:00:00.000Z"),
             updatedAt: new Date("2026-08-19T00:00:00.000Z"),
         };

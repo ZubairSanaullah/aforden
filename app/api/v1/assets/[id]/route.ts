@@ -1,6 +1,7 @@
 import {
     jsonSuccess,
     withPublicApiAuth,
+    withIdempotency,
     getAuthenticatedWorkspaceId,
     withTenantScope,
     PUBLIC_API_SCOPES,
@@ -57,7 +58,7 @@ export const GET = withPublicApiAuth(
  * Requires `assets:write` scope.
  */
 export const PATCH = withPublicApiAuth(
-    async (request: Request, context: RouteContext) => {
+    withIdempotency(async (request: Request, context: RouteContext) => {
         try {
             const params = await context.params;
             const assetId = params.id;
@@ -86,7 +87,7 @@ export const PATCH = withPublicApiAuth(
         } catch (error) {
             return handleAssetPublicApiError(error);
         }
-    },
+    }),
     {
         requiredScopes: [PUBLIC_API_SCOPES.ASSETS_WRITE],
     },

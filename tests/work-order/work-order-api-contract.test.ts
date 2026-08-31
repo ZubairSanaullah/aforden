@@ -138,6 +138,7 @@ describe("Phase 1.6.9 — WorkOrder API Contract Hardening Suite", () => {
         id: "user_adm_contract",
         name: "Contract Admin",
         email: "admin@contract.com",
+        platformRole: null,
         emailVerified: new Date(),
         passwordHash: "hash",
         avatarUrl: null,

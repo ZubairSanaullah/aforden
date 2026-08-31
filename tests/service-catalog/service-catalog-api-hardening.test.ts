@@ -244,10 +244,11 @@ describe("Phase 1.5.6 — Service Catalog & Work Type API Hardening Suite", () =
             id: userId,
             name,
             email: `${userId}@example.com`,
+        platformRole: null,
             passwordHash: "hashed",
-            emailVerified: new Date(),
+        emailVerified: new Date(),
             avatarUrl: null,
-            status: "ACTIVE" as any,
+        status: "ACTIVE" as any,
             createdAt: new Date(),
             updatedAt: new Date(),
         };

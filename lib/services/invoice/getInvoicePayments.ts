@@ -52,12 +52,26 @@ export async function getInvoicePayments(
         include: {
             recordedByMember: {
                 include: {
-                    user: true,
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            avatarUrl: true,
+                        },
+                    },
                 },
             },
             voidedByMember: {
                 include: {
-                    user: true,
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            avatarUrl: true,
+                        },
+                    },
                 },
             },
         },

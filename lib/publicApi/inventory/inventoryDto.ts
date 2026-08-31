@@ -26,6 +26,8 @@ export const APPROVED_PUBLIC_INVENTORY_DTO_KEYS = [
     "updatedAt",
 ] as const;
 
+export const APPROVED_PUBLIC_INVENTORY_BALANCE_DTO_KEYS = APPROVED_PUBLIC_INVENTORY_DTO_KEYS;
+
 /**
  * Maps an internal InventoryBalance read model to the canonical PublicInventoryBalanceDto.
  */

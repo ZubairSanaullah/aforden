@@ -59,6 +59,7 @@ describe("Phase 1.3.3 — Team Member Architecture (User → WorkspaceMember →
         id: "user_john_123",
         name: "John Doe",
         email: "john.doe@example.com",
+        platformRole: null,
         passwordHash: "hashed-pwd",
         emailVerified: new Date("2026-08-19T00:00:00.000Z"),
         avatarUrl: "https://avatar.example.com/john.png",
