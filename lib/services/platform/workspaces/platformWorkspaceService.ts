@@ -15,7 +15,17 @@ import {
     PlatformWorkspaceOrganizationDto,
     PlatformWorkspaceBillingAccountDto,
     PlatformWorkspaceCountsDto,
+    WorkspaceLifecycleOptions,
 } from "./types";
+import {
+    recordPlatformAuditEvent,
+    PLATFORM_AUDIT_EVENTS,
+} from "../audit";
+import {
+    PlatformActionValidationError,
+    PlatformWorkspaceNotFoundError,
+    PlatformWorkspaceConflictError,
+} from "./errors";
 
 /**
  * Maps raw database workspace entity into a sanitized PlatformWorkspaceSummaryDto.
@@ -253,15 +263,17 @@ export async function getWorkspaces(
  */
 export async function getWorkspace(
     context: PlatformAuthorizationContext,
-    workspaceId: string
+    workspaceId: string,
+    tx?: Prisma.TransactionClient
 ): Promise<PlatformWorkspaceDetailDto | null> {
     assertPlatformPermission(context, PLATFORM_PERMISSIONS.WORKSPACES_VIEW);
     const canViewBilling = hasPlatformPermission(
         context,
         PLATFORM_PERMISSIONS.BILLING_VIEW
     );
+    const db = tx || prisma;
 
-    const workspace = await prisma.workspace.findUnique({
+    const workspace = await db.workspace.findUnique({
         where: { id: workspaceId },
         select: {
             id: true,
@@ -370,3 +382,208 @@ export async function getWorkspace(
         counts,
     };
 }
+
+export const MIN_JUSTIFICATION_REASON_LENGTH = 10;
+
+/**
+ * Validates mandatory justification reason for Tier-2 dangerous operations (Phase 1.19.1 Section 5).
+ * Enforces string type and trimmed length of at least 10 characters.
+ */
+export function validateDangerousActionReason(reason: unknown): string {
+    if (typeof reason !== "string") {
+        throw new PlatformActionValidationError(
+            "A justification reason string is mandatory for Tier-2 dangerous operations."
+        );
+    }
+    const trimmed = reason.trim();
+    if (trimmed.length < MIN_JUSTIFICATION_REASON_LENGTH) {
+        throw new PlatformActionValidationError(
+            `Justification reason must be at least ${MIN_JUSTIFICATION_REASON_LENGTH} characters long (received ${trimmed.length}).`
+        );
+    }
+    return trimmed;
+}
+
+/**
+ * Tier-2 Step-Up Re-Authentication Guard (Phase 1.19.1 Section 5).
+ * 
+ * Enforcing step-up authentication is deferred to Phase 1.19.17.
+ * This function serves as the permanent structural gate, ensuring that the
+ * step-up check can be activated in Phase 1.19.17 without any signature or
+ * caller refactoring.
+ */
+export function assertTier2StepUpAuthenticated(
+    _context: PlatformAuthorizationContext
+): void {
+    // Phase 1.19.17 Step-up hook:
+    // When implemented, will verify context.stepUpConfirmedAt within the 5-minute window.
+}
+
+/**
+ * Suspends an active workspace (Phase 1.19.7).
+ * 
+ * Invariants & Guarantees:
+ * 1. Strictly gated by platform.workspaces.suspend.
+ * 2. Tier-2 dangerous action validation: mandatory justification reason (min 10 chars).
+ * 3. Step-up authentication guard hook (Phase 1.19.17).
+ * 4. Non-destructive: Updates Organization.status to INACTIVE; NEVER deletes child entities.
+ * 5. Atomic & durable: Organization update and WORKSPACE_SUSPENDED audit record are committed
+ *    together in a single Prisma transaction. If either fails, all mutations roll back.
+ * 6. State conflict protection: Rejects if the workspace is already INACTIVE.
+ */
+export async function suspendWorkspace(
+    context: PlatformAuthorizationContext,
+    workspaceId: string,
+    reason: string,
+    options?: WorkspaceLifecycleOptions
+): Promise<PlatformWorkspaceDetailDto> {
+    // Permission Gate
+    assertPlatformPermission(context, PLATFORM_PERMISSIONS.WORKSPACES_SUSPEND);
+
+    // Tier-2 Dangerous Action Reason Validation
+    const validatedReason = validateDangerousActionReason(reason);
+
+    // Tier-2 Step-Up Re-Authentication Guard (Phase 1.19.17 hook)
+    assertTier2StepUpAuthenticated(context);
+
+    // Atomic Transaction: Status update + Compliance Audit Record
+    return prisma.$transaction(async (tx) => {
+        const workspace = await tx.workspace.findUnique({
+            where: { id: workspaceId },
+            include: { organization: true },
+        });
+
+        if (!workspace) {
+            throw new PlatformWorkspaceNotFoundError(workspaceId);
+        }
+
+        const currentStatus = workspace.organization?.status ?? "ACTIVE";
+        if (currentStatus === "INACTIVE") {
+            throw new PlatformWorkspaceConflictError(
+                `Workspace '${workspaceId}' is already suspended.`
+            );
+        }
+
+        if (workspace.organization) {
+            await tx.organization.update({
+                where: { id: workspace.organization.id },
+                data: { status: "INACTIVE" },
+            });
+        } else {
+            await tx.organization.create({
+                data: {
+                    workspaceId,
+                    businessName: workspace.name,
+                    status: "INACTIVE",
+                },
+            });
+        }
+
+        await recordPlatformAuditEvent({
+            actor: context,
+            action: PLATFORM_AUDIT_EVENTS.WORKSPACE_SUSPENDED,
+            targetType: "WORKSPACE",
+            targetId: workspaceId,
+            workspaceId,
+            requestId: options?.requestId ?? `req_platform_${Date.now()}`,
+            ipAddress: options?.ipAddress ?? "127.0.0.1",
+            userAgent: options?.userAgent ?? null,
+            reason: validatedReason,
+            previousState: { status: currentStatus },
+            newState: { status: "INACTIVE" },
+            metadata: options?.metadata ?? null,
+            tx,
+        });
+
+        const detail = await getWorkspace(context, workspaceId, tx);
+        if (!detail) {
+            throw new PlatformWorkspaceNotFoundError(workspaceId);
+        }
+        return detail;
+    });
+}
+
+/**
+ * Reactivates a suspended workspace (Phase 1.19.7).
+ * 
+ * Invariants & Guarantees:
+ * 1. Strictly gated by platform.workspaces.suspend.
+ * 2. Tier-2 dangerous action validation: mandatory justification reason (min 10 chars).
+ * 3. Step-up authentication guard hook (Phase 1.19.17).
+ * 4. Updates Organization.status to ACTIVE.
+ * 5. Atomic & durable: Organization update and WORKSPACE_REACTIVATED audit record are committed
+ *    together in a single Prisma transaction. If either fails, all mutations roll back.
+ * 6. State conflict protection: Rejects if the workspace is already ACTIVE.
+ */
+export async function reactivateWorkspace(
+    context: PlatformAuthorizationContext,
+    workspaceId: string,
+    reason: string,
+    options?: WorkspaceLifecycleOptions
+): Promise<PlatformWorkspaceDetailDto> {
+    // Permission Gate
+    assertPlatformPermission(context, PLATFORM_PERMISSIONS.WORKSPACES_SUSPEND);
+
+    // Tier-2 Dangerous Action Reason Validation
+    const validatedReason = validateDangerousActionReason(reason);
+
+    // Tier-2 Step-Up Re-Authentication Guard (Phase 1.19.17 hook)
+    assertTier2StepUpAuthenticated(context);
+
+    // Atomic Transaction: Status update + Compliance Audit Record
+    return prisma.$transaction(async (tx) => {
+        const workspace = await tx.workspace.findUnique({
+            where: { id: workspaceId },
+            include: { organization: true },
+        });
+
+        if (!workspace) {
+            throw new PlatformWorkspaceNotFoundError(workspaceId);
+        }
+
+        const currentStatus = workspace.organization?.status ?? "ACTIVE";
+        if (currentStatus === "ACTIVE") {
+            throw new PlatformWorkspaceConflictError(
+                `Workspace '${workspaceId}' is already active.`
+            );
+        }
+
+        if (workspace.organization) {
+            await tx.organization.update({
+                where: { id: workspace.organization.id },
+                data: { status: "ACTIVE" },
+            });
+        } else {
+            await tx.organization.create({
+                data: {
+                    workspaceId,
+                    businessName: workspace.name,
+                    status: "ACTIVE",
+                },
+            });
+        }
+
+        await recordPlatformAuditEvent({
+            actor: context,
+            action: PLATFORM_AUDIT_EVENTS.WORKSPACE_REACTIVATED,
+            targetType: "WORKSPACE",
+            targetId: workspaceId,
+            workspaceId,
+            requestId: options?.requestId ?? `req_platform_${Date.now()}`,
+            ipAddress: options?.ipAddress ?? "127.0.0.1",
+            userAgent: options?.userAgent ?? null,
+            reason: validatedReason,
+            previousState: { status: currentStatus },
+            newState: { status: "ACTIVE" },
+            metadata: options?.metadata ?? null,
+            tx,
+        });
+
+        const detail = await getWorkspace(context, workspaceId, tx);
+        if (!detail) {
+            throw new PlatformWorkspaceNotFoundError(workspaceId);
+        }
+        return detail;
+    });
+}
+

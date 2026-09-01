@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
@@ -129,7 +129,17 @@ const mockDispatcherContext: WorkspaceAuthorizationContext = {
 // Test Suite
 // =========================================================================
 describe("Phase 1.14.6 — Financial Metrics, Revenue Summary & AR Aging", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   // -----------------------------------------------------------------------
+
   // 1. Metric Registry Assertions & Open-Closed Deferrals
   // -----------------------------------------------------------------------
   describe("1. Metric Registry Assertions", () => {

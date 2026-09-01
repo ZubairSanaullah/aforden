@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
@@ -116,7 +116,17 @@ function createPredicateEvaluatingDb(fixtures: {
 }
 
 describe("Phase 1.14.5 — Technician Productivity Metrics & Reports (Predicate-Evaluating)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const mockAdminContext: WorkspaceAuthorizationContext = {
+
     user: { id: "user_admin", email: "admin@test.com" } as any,
     membership: { id: "mem_admin", role: "ADMIN" } as any,
     workspace: { id: "ws_alpha", name: "Alpha Corp", timezone: "America/New_York" } as any,

@@ -93,3 +93,11 @@ export interface PlatformWorkspacesFilter {
     sortBy?: "name" | "createdAt" | "slug";
     sortOrder?: "asc" | "desc";
 }
+
+export interface WorkspaceLifecycleOptions {
+    requestId?: string;
+    ipAddress?: string;
+    userAgent?: string | null;
+    metadata?: Record<string, unknown> | null;
+}
+
