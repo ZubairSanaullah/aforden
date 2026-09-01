@@ -52,6 +52,8 @@ export const PLATFORM_AUDIT_EVENTS = {
     // Security & Sessions
     SECURITY_SESSION_TERMINATED: "platform.security.session_terminated",
     EMERGENCY_ACCESS_INVOKED: "platform.security.emergency_access_invoked",
+    STEP_UP_CHALLENGE_SUCCESS: "platform.security.step_up_challenge_success",
+    STEP_UP_CHALLENGE_FAILED: "platform.security.step_up_challenge_failed",
 } as const;
 
 export type PlatformAuditEventType =

@@ -90,7 +90,7 @@ describe("Phase 1.19.7 — Workspace Lifecycle Administration Suite", () => {
             status: PlatformAdminStatus.ACTIVE,
             lastActiveAt: new Date(),
             lastLoginAt: new Date(),
-            stepUpConfirmedAt: null,
+            stepUpConfirmedAt: new Date(),
             metadata: null,
         };
     }
@@ -331,6 +331,8 @@ describe("Phase 1.19.7 — Workspace Lifecycle Administration Suite", () => {
         it("exposes assertTier2StepUpAuthenticated hook for Phase 1.19.17 readiness", () => {
             const context = createMockPlatformContext();
             expect(() => assertTier2StepUpAuthenticated(context)).not.toThrow();
+            const unauthenticatedContext = { ...context, stepUpConfirmedAt: null };
+            expect(() => assertTier2StepUpAuthenticated(unauthenticatedContext)).toThrow();
         });
     });
 

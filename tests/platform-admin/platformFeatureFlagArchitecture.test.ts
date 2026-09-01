@@ -82,7 +82,7 @@ describe("Phase 1.19.10 — Feature Flag Architecture Suite", () => {
             status: PlatformAdminStatus.ACTIVE,
             lastActiveAt: new Date(),
             lastLoginAt: new Date(),
-            stepUpConfirmedAt: null,
+            stepUpConfirmedAt: new Date(),
             metadata: null,
         };
     }

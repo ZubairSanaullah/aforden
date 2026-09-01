@@ -5,6 +5,7 @@ import {
     PLATFORM_PERMISSIONS,
     assertPlatformPermission,
     hasPlatformPermission,
+    PlatformStepUpAuthenticationRequiredError,
 } from "../authorization";
 import {
     PlatformWorkspaceSummaryDto,
@@ -404,19 +405,30 @@ export function validateDangerousActionReason(reason: unknown): string {
     return trimmed;
 }
 
+export const PLATFORM_STEP_UP_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Tier-2 Step-Up Re-Authentication Guard (Phase 1.19.1 Section 5).
+ * Tier-2 Step-Up Re-Authentication Guard (Phase 1.19.1 Section 5 & Phase 1.19.17).
  * 
- * Enforcing step-up authentication is deferred to Phase 1.19.17.
- * This function serves as the permanent structural gate, ensuring that the
- * step-up check can be activated in Phase 1.19.17 without any signature or
- * caller refactoring.
+ * Enforces server-side verification that the operator has completed step-up
+ * re-authentication within the last 5 minutes (300,000 ms).
+ * Throws PlatformStepUpAuthenticationRequiredError if missing or expired.
  */
 export function assertTier2StepUpAuthenticated(
-    _context: PlatformAuthorizationContext
+    context: PlatformAuthorizationContext
 ): void {
-    // Phase 1.19.17 Step-up hook:
-    // When implemented, will verify context.stepUpConfirmedAt within the 5-minute window.
+    if (!context.stepUpConfirmedAt) {
+        throw new PlatformStepUpAuthenticationRequiredError(
+            "Step-up authentication required for Tier-2 dangerous actions."
+        );
+    }
+
+    const elapsedMs = Date.now() - new Date(context.stepUpConfirmedAt).getTime();
+    if (elapsedMs > PLATFORM_STEP_UP_MAX_AGE_MS || elapsedMs < 0) {
+        throw new PlatformStepUpAuthenticationRequiredError(
+            "Step-up authentication expired. Please re-authenticate."
+        );
+    }
 }
 
 /**

@@ -5,6 +5,7 @@ import {
     PLATFORM_PERMISSIONS,
     assertPlatformPermission,
 } from "../authorization";
+import { assertTier2StepUpAuthenticated } from "../workspaces";
 import {
     recordPlatformAuditEvent,
     PLATFORM_AUDIT_EVENTS,
@@ -382,6 +383,7 @@ export async function deleteFeatureFlag(
     options?: FeatureFlagLifecycleOptions
 ): Promise<void> {
     assertPlatformPermission(context, PLATFORM_PERMISSIONS.CONFIG_MANAGE_FLAGS);
+    assertTier2StepUpAuthenticated(context);
 
     return prisma.$transaction(async (tx) => {
         const flag = await tx.platformFeatureFlag.findUnique({ where: { key: flagKey } });

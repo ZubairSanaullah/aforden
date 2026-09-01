@@ -33,3 +33,9 @@ export class PlatformSessionExpiredError extends PlatformAuthorizationError {
         super(message, 401, "PLATFORM_SESSION_EXPIRED");
     }
 }
+
+export class PlatformStepUpAuthenticationRequiredError extends PlatformAuthorizationError {
+    constructor(message = "Step-up authentication required within the last 5 minutes.") {
+        super(message, 403, "STEP_UP_REQUIRED");
+    }
+}

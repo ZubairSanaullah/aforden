@@ -56,19 +56,10 @@ import {
     PlatformBillingConflictError,
 } from "@/lib/services/platform/billing/errors";
 import { PlatformHealthError } from "@/lib/services/platform/health/errors";
+import { PlatformStepUpAuthenticationRequiredError } from "@/lib/services/platform/authorization";
+import { PlatformStepUpChallengeFailedError } from "@/lib/services/platform/security";
 
-/**
- * Transport-level error thrown when Tier-2 step-up authentication is missing or expired.
- */
-export class PlatformStepUpAuthenticationRequiredError extends Error {
-    readonly statusCode = 403;
-    readonly code = "STEP_UP_REQUIRED";
-
-    constructor(message = "Step-up authentication required within the last 5 minutes.") {
-        super(message);
-        this.name = "PlatformStepUpAuthenticationRequiredError";
-    }
-}
+export { PlatformStepUpAuthenticationRequiredError, PlatformStepUpChallengeFailedError };
 
 /**
  * Standardized success response envelope for Platform Administration APIs.
@@ -146,6 +137,13 @@ export function handlePlatformError(error: unknown): NextResponse {
             error.message,
             403,
             "STEP_UP_REQUIRED"
+        );
+    }
+    if (error instanceof PlatformStepUpChallengeFailedError) {
+        return jsonError(
+            error.message,
+            403,
+            "STEP_UP_CHALLENGE_FAILED"
         );
     }
 

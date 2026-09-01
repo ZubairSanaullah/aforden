@@ -94,7 +94,7 @@ describe("Phase 1.19.8 — Platform User Administration Suite", () => {
             status: PlatformAdminStatus.ACTIVE,
             lastActiveAt: new Date(),
             lastLoginAt: new Date(),
-            stepUpConfirmedAt: null,
+            stepUpConfirmedAt: new Date(),
             metadata: null,
         };
     }

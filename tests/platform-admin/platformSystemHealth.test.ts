@@ -466,9 +466,9 @@ describe("Phase 1.19.15 — Platform System Health & Operational Visibility Suit
     // 8. Audit Taxonomy Baseline Stability
     // =========================================================================
     describe("8. Audit Taxonomy Baseline Stability", () => {
-        it("confirms audit taxonomy remains locked at exactly 31 events (zero new events in 1.19.15)", () => {
+        it("confirms audit taxonomy remains locked at baseline (31 events through 1.19.16, 33 with Phase 1.19.17 step-up events)", () => {
             const eventKeys = Object.keys(PLATFORM_AUDIT_EVENTS);
-            expect(eventKeys.length).toBe(31);
+            expect(eventKeys.length).toBe(33);
         });
     });
 });
