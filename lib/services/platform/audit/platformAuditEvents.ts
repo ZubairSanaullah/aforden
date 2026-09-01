@@ -19,8 +19,10 @@ export const PLATFORM_AUDIT_EVENTS = {
 
     // Entitlements & Billing
     ENTITLEMENT_OVERRIDDEN: "platform.billing.entitlement_overridden",
+    ENTITLEMENT_REVOKED: "platform.billing.entitlement_revoked",
     PLAN_ASSIGNED: "platform.billing.plan_assigned",
     BILLING_RESYNCHRONIZED: "platform.billing.resynchronized",
+    BILLING_WEBHOOK_REPLAYED: "platform.billing.webhook_replayed",
 
     // Feature Flags & Config
     FEATURE_FLAG_CREATED: "platform.config.flag_created",
@@ -65,6 +67,9 @@ export type PlatformAuditTargetType =
     | "JOB"
     | "SESSION"
     | "BILLING_PLAN"
+    | "BILLING_ACCOUNT"
+    | "SUBSCRIPTION"
+    | "ENTITLEMENT"
     | "INTEGRATION"
     | "INTEGRATION_CONNECTION"
     | "INTEGRATION_CREDENTIAL"
