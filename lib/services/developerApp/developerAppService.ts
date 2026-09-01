@@ -12,6 +12,7 @@ import {
     validatePublicApiScopes,
     ALL_PUBLIC_API_SCOPES,
 } from "@/lib/publicApi/scopes";
+import { timingSafeEqualStrings } from "@/lib/services/platform/security/constantTime";
 
 /**
  * Computes the SHA-256 hash of a raw API key secret.
@@ -171,6 +172,13 @@ export async function resolveActiveApiKeyByKeyHash(
     });
 
     if (!apiKey) {
+        // Run dummy timingSafeEqual to equalize CPU execution profile
+        timingSafeEqualStrings(keyHash, "0".repeat(64));
+        return null;
+    }
+
+    // Timing-safe cryptographic comparison (Phase 1.19.18)
+    if (!timingSafeEqualStrings(keyHash, apiKey.keyHash)) {
         return null;
     }
 
@@ -197,6 +205,17 @@ export async function resolveActiveApiKeyByKeyHash(
         environment: apiKey.environment,
         scopes: apiKey.scopes,
     };
+}
+
+/**
+ * Verifies a candidate raw API key against a stored keyHash using constant-time comparison (Phase 1.19.18).
+ */
+export function verifyApiKeyTimingSafe(
+    candidateRawKey: string,
+    storedKeyHash: string
+): boolean {
+    const candidateHash = hashApiKey(candidateRawKey);
+    return timingSafeEqualStrings(candidateHash, storedKeyHash);
 }
 
 /**

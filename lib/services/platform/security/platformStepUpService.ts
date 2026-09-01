@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
 import { PlatformAuthorizationContext } from "../authorization/types";
 import {
@@ -6,6 +5,7 @@ import {
     recordPlatformAuditEvent,
 } from "../audit";
 import { PlatformActionValidationError } from "../workspaces";
+import { constantTimeBcryptCompare } from "./constantTime";
 
 export const PLATFORM_STEP_UP_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -83,15 +83,24 @@ export async function verifyPlatformStepUpChallenge(
         },
     });
 
-    const isEligible =
+    const isEligible = Boolean(
         user &&
         user.status === "ACTIVE" &&
         user.platformRole &&
         user.platformAdminProfile &&
         user.platformAdminProfile.status === "ACTIVE" &&
-        user.passwordHash;
+        user.passwordHash
+    );
 
-    if (!isEligible) {
+    // Constant-time password comparison (Phase 1.19.18):
+    // Always executes full bcrypt work factor, even when operator is ineligible or lacking a password hash,
+    // preventing enumeration of operator status via response latency side-channels.
+    const passwordMatches = await constantTimeBcryptCompare(
+        input.password,
+        isEligible ? user!.passwordHash : null
+    );
+
+    if (!isEligible || !passwordMatches) {
         await recordPlatformAuditEvent({
             actor: context,
             action: PLATFORM_AUDIT_EVENTS.STEP_UP_CHALLENGE_FAILED,
@@ -101,29 +110,9 @@ export async function verifyPlatformStepUpChallenge(
             requestId: options?.requestId ?? `req_stepup_fail_${Date.now()}`,
             ipAddress: options?.ipAddress ?? "127.0.0.1",
             userAgent: options?.userAgent ?? null,
-            reason: input.reason ?? "Step-up challenge failed: account ineligible or inactive.",
+            reason: input.reason ?? "Step-up challenge failed: invalid credentials.",
             metadata: {
-                reason: "ineligible_operator",
-                ...(options?.metadata || {}),
-            },
-        });
-        throw new PlatformStepUpChallengeFailedError();
-    }
-
-    const passwordMatches = await bcrypt.compare(input.password, user.passwordHash!);
-    if (!passwordMatches) {
-        await recordPlatformAuditEvent({
-            actor: context,
-            action: PLATFORM_AUDIT_EVENTS.STEP_UP_CHALLENGE_FAILED,
-            targetType: "OPERATOR",
-            targetId: context.userId,
-            workspaceId: null,
-            requestId: options?.requestId ?? `req_stepup_fail_${Date.now()}`,
-            ipAddress: options?.ipAddress ?? "127.0.0.1",
-            userAgent: options?.userAgent ?? null,
-            reason: input.reason ?? "Step-up challenge failed: invalid password.",
-            metadata: {
-                reason: "password_mismatch",
+                reason: !isEligible ? "ineligible_operator" : "password_mismatch",
                 ...(options?.metadata || {}),
             },
         });
@@ -132,7 +121,7 @@ export async function verifyPlatformStepUpChallenge(
 
     const now = new Date();
     await prisma.platformAdminProfile.update({
-        where: { id: user.platformAdminProfile!.id },
+        where: { id: user!.platformAdminProfile!.id },
         data: { stepUpConfirmedAt: now },
     });
 
