@@ -520,6 +520,20 @@ model PlatformFeatureFlag {
   @@index([enabled])
 }
 
+model PlatformRuntimeSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(128)
+  value       Json
+  valueType   String   @db.VarChar(32)
+  description String?  @db.Text
+  isProtected Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([isProtected])
+}
 
 
 model Workspace {
