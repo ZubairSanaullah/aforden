@@ -33,6 +33,8 @@ export const PLATFORM_AUDIT_EVENTS = {
     // Developer Platform Administration
     DEVELOPER_API_KEY_REVOKED: "platform.developer.api_key_revoked",
     DEVELOPER_WEBHOOK_DISABLED: "platform.developer.webhook_disabled",
+    DEVELOPER_APP_STATUS_UPDATED: "platform.developer.app_status_updated",
+    DEVELOPER_RATE_LIMIT_RESET: "platform.developer.rate_limit_reset",
 
     // Operations & Jobs
     JOB_MANUALLY_TRIGGERED: "platform.operations.job_triggered",
@@ -58,7 +60,10 @@ export type PlatformAuditTargetType =
     | "SESSION"
     | "BILLING_PLAN"
     | "INTEGRATION"
-    | "QUEUE";
+    | "QUEUE"
+    | "DEVELOPER_APP"
+    | "WEBHOOK"
+    | "RATE_LIMIT";
 
 export interface PlatformAuditEntry {
     id: string;
