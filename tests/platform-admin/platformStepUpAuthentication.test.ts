@@ -59,13 +59,14 @@ import {
     verifyPlatformStepUpChallenge,
     getPlatformStepUpStatus,
     PlatformStepUpChallengeFailedError,
+    DUMMY_BCRYPT_HASH,
 } from "@/lib/services/platform/security";
 import {
     PlatformStepUpAuthenticationRequiredError,
 } from "@/lib/services/platform/authorization";
 import { POST as stepUpPostRoute, GET as stepUpGetRoute } from "@/app/api/platform/auth/step-up/route";
 
-describe("Phase 1.19.17 — Dangerous-Action Protection (Step-Up Auth Enforcement)", () => {
+describe("Phase 1.19.17 — Dangerous-Action Protection (Step-Up Auth Enforcement) Suite", () => {
     const TEST_PASSWORD = "CorrectPlatformPassword123!";
     let testPasswordHash: string;
 
@@ -210,15 +211,18 @@ describe("Phase 1.19.17 — Dangerous-Action Protection (Step-Up Auth Enforcemen
             ).rejects.toThrow(PlatformActionValidationError);
         });
 
-        it("rejects and audits failure when user account is inactive or profile is missing", async () => {
+        it("rejects, audits failure, and performs constant-time dummy compare when user account is inactive or profile is missing", async () => {
             const context = createMockPlatformContext();
             mockDatabaseUser({ status: "SUSPENDED" });
             auditCreateMock.mockResolvedValueOnce({ id: "audit_fail_2" });
+            const bcryptCompareSpy = vi.spyOn(bcrypt, "compare");
 
             await expect(
                 verifyPlatformStepUpChallenge(context, { password: TEST_PASSWORD })
             ).rejects.toThrow(PlatformStepUpChallengeFailedError);
 
+            // Verifies constant-time execution against dummy hash to prevent timing side-channels
+            expect(bcryptCompareSpy).toHaveBeenCalled();
             expect(auditCreateMock).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
@@ -226,6 +230,31 @@ describe("Phase 1.19.17 — Dangerous-Action Protection (Step-Up Auth Enforcemen
                     }),
                 })
             );
+
+            bcryptCompareSpy.mockRestore();
+        });
+
+        it("rejects, audits failure, and performs constant-time dummy compare when user has no passwordHash set", async () => {
+            const context = createMockPlatformContext();
+            mockDatabaseUser({ passwordHash: null });
+            auditCreateMock.mockResolvedValueOnce({ id: "audit_fail_3" });
+            const bcryptCompareSpy = vi.spyOn(bcrypt, "compare");
+
+            await expect(
+                verifyPlatformStepUpChallenge(context, { password: TEST_PASSWORD })
+            ).rejects.toThrow(PlatformStepUpChallengeFailedError);
+
+            // Verifies constant-time execution with DUMMY_BCRYPT_HASH when passwordHash is null
+            expect(bcryptCompareSpy).toHaveBeenCalledWith(TEST_PASSWORD, DUMMY_BCRYPT_HASH);
+            expect(auditCreateMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        action: PLATFORM_AUDIT_EVENTS.STEP_UP_CHALLENGE_FAILED,
+                    }),
+                })
+            );
+
+            bcryptCompareSpy.mockRestore();
         });
     });
 

@@ -40,7 +40,8 @@ describe("Phase 1.19.6 — Platform Workspace Administration Suite", () => {
     });
 
     function createMockPlatformContext(
-        role: PlatformRole = PlatformRole.PLATFORM_ADMIN
+        role: PlatformRole = PlatformRole.PLATFORM_ADMIN,
+        stepUpConfirmedAt: Date | null = new Date()
     ): PlatformAuthorizationContext {
         return {
             userId: `usr_${role.toLowerCase()}`,
@@ -52,7 +53,7 @@ describe("Phase 1.19.6 — Platform Workspace Administration Suite", () => {
             status: PlatformAdminStatus.ACTIVE,
             lastActiveAt: new Date(),
             lastLoginAt: new Date(),
-            stepUpConfirmedAt: null,
+            stepUpConfirmedAt,
             metadata: null,
         };
     }

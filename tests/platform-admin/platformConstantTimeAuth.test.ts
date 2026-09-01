@@ -43,8 +43,6 @@ import {
     constantTimeHashCompare,
     constantTimeBcryptCompare,
     DUMMY_BCRYPT_HASH,
-    verifyPlatformStepUpChallenge,
-    PlatformStepUpChallengeFailedError,
 } from "@/lib/services/platform/security";
 import {
     PlatformRole,
@@ -52,15 +50,12 @@ import {
     PlatformAuthorizationContext,
 } from "@/lib/services/platform/authorization/types";
 import {
-    PLATFORM_AUDIT_EVENTS,
-} from "@/lib/services/platform/audit";
-import {
     hashApiKey,
     verifyApiKeyTimingSafe,
     resolveActiveApiKeyByKeyHash,
 } from "@/lib/services/developerApp/developerAppService";
 
-describe("Phase 1.19.18 — Security Hardening (Constant-Time Authentication)", () => {
+describe("Phase 1.19.18 — Security Hardening (Constant-Time Authentication) Suite", () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -226,87 +221,9 @@ describe("Phase 1.19.18 — Security Hardening (Constant-Time Authentication)", 
     });
 
     // =========================================================================
-    // 5. Step-Up Challenge Timing Side-Channel Resistance
+    // 5. API Key Timing-Safe Verification (Developer Platform)
     // =========================================================================
-    describe("5. verifyPlatformStepUpChallenge Timing Resistance", () => {
-        const VALID_PASSWORD = "CorrectPassword123!";
-
-        it("runs bcrypt comparison even when user is ineligible or missing passwordHash", async () => {
-            const context = createMockPlatformContext();
-            const bcryptCompareSpy = vi.spyOn(bcrypt, "compare");
-
-            // Mock user without passwordHash (e.g. OAuth-only or inactive)
-            userFindUniqueMock.mockResolvedValueOnce({
-                id: "usr_operator_1",
-                email: "operator@aforden.com",
-                passwordHash: null, // No password hash
-                status: "ACTIVE",
-                platformRole: PlatformRole.PLATFORM_ADMIN,
-                platformAdminProfile: {
-                    id: "prof_operator_1",
-                    status: PlatformAdminStatus.ACTIVE,
-                },
-            });
-            auditCreateMock.mockResolvedValueOnce({ id: "audit_1" });
-
-            await expect(
-                verifyPlatformStepUpChallenge(context, { password: VALID_PASSWORD })
-            ).rejects.toThrow(PlatformStepUpChallengeFailedError);
-
-            // Verifies that bcrypt.compare was still invoked with DUMMY_BCRYPT_HASH
-            expect(bcryptCompareSpy).toHaveBeenCalledWith(VALID_PASSWORD, DUMMY_BCRYPT_HASH);
-
-            // Security audit event recorded for failed challenge
-            expect(auditCreateMock).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({
-                        action: PLATFORM_AUDIT_EVENTS.STEP_UP_CHALLENGE_FAILED,
-                    }),
-                })
-            );
-
-            bcryptCompareSpy.mockRestore();
-        });
-
-        it("runs bcrypt comparison when operator profile is INACTIVE", async () => {
-            const context = createMockPlatformContext();
-            const validHash = await bcrypt.hash(VALID_PASSWORD, 10);
-            const bcryptCompareSpy = vi.spyOn(bcrypt, "compare");
-
-            userFindUniqueMock.mockResolvedValueOnce({
-                id: "usr_operator_1",
-                email: "operator@aforden.com",
-                passwordHash: validHash,
-                status: "ACTIVE",
-                platformRole: PlatformRole.PLATFORM_ADMIN,
-                platformAdminProfile: {
-                    id: "prof_operator_1",
-                    status: PlatformAdminStatus.INACTIVE, // Inactive profile
-                },
-            });
-            auditCreateMock.mockResolvedValueOnce({ id: "audit_2" });
-
-            await expect(
-                verifyPlatformStepUpChallenge(context, { password: VALID_PASSWORD })
-            ).rejects.toThrow(PlatformStepUpChallengeFailedError);
-
-            expect(bcryptCompareSpy).toHaveBeenCalled();
-            expect(auditCreateMock).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({
-                        action: PLATFORM_AUDIT_EVENTS.STEP_UP_CHALLENGE_FAILED,
-                    }),
-                })
-            );
-
-            bcryptCompareSpy.mockRestore();
-        });
-    });
-
-    // =========================================================================
-    // 6. API Key Timing-Safe Verification (Developer Platform)
-    // =========================================================================
-    describe("6. API Key Timing-Safe Verification", () => {
+    describe("5. API Key Timing-Safe Verification", () => {
         const rawKey = "afd_live_abcdef1234567890abcdef1234567890";
         const keyHash = hashApiKey(rawKey);
 

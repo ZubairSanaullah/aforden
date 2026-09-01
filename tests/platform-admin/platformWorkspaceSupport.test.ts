@@ -113,7 +113,8 @@ import { Prisma } from "@/generated/prisma/client";
 describe("Phase 1.19.9 — Workspace Support & Controlled Access Suite", () => {
     function createMockPlatformContext(
         role: PlatformRole = PlatformRole.PLATFORM_SUPPORT,
-        userId = `usr_${role.toLowerCase()}`
+        userId = `usr_${role.toLowerCase()}`,
+        stepUpConfirmedAt: Date | null = new Date()
     ): PlatformAuthorizationContext {
         return {
             userId,
@@ -125,7 +126,7 @@ describe("Phase 1.19.9 — Workspace Support & Controlled Access Suite", () => {
             status: PlatformAdminStatus.ACTIVE,
             lastActiveAt: new Date(),
             lastLoginAt: new Date(),
-            stepUpConfirmedAt: null,
+            stepUpConfirmedAt,
             metadata: null,
         };
     }

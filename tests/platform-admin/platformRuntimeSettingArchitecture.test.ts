@@ -83,7 +83,7 @@ describe("Phase 1.19.11 — Platform Configuration Management Suite", () => {
 
     function createMockPlatformContext(
         role: PlatformRole = PlatformRole.PLATFORM_ADMIN,
-        stepUpConfirmedAt: Date | null = null
+        stepUpConfirmedAt: Date | null = new Date()
     ): PlatformAuthorizationContext {
         return {
             userId: `usr_${role.toLowerCase()}`,
