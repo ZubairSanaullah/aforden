@@ -419,6 +419,7 @@ describe("Phase 1.16.7 — Automation Scheduling & Time-Driven Trigger Engine", 
         },
       });
       expect(claim2.count).toBe(0); // 0 rows updated -> Concurrency collision prevented!
+      await prisma.automationScheduleJob.delete({ where: { id: job.id } });
     });
   });
 
