@@ -503,7 +503,27 @@ model PlatformAuditLog {
   @@index([requestId])
 }
 
+model PlatformFeatureFlag {
+  id                  String   @id @default(cuid())
+  key                 String   @unique @db.VarChar(128)
+  name                String   @db.VarChar(255)
+  description         String?  @db.Text
+  enabled             Boolean  @default(false)
+  defaultValue        Boolean  @default(false)
+  rolloutPercentage   Int?     @default(100)
+  allowedWorkspaceIds String[]
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([key])
+  @@index([enabled])
+}
+
+
+
 model Workspace {
+
   id                  String  @id @default(cuid())
   name                String
   slug                String  @unique

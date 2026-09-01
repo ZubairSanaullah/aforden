@@ -26,7 +26,9 @@ export const PLATFORM_AUDIT_EVENTS = {
     FEATURE_FLAG_CREATED: "platform.config.flag_created",
     FEATURE_FLAG_UPDATED: "platform.config.flag_updated",
     FEATURE_FLAG_TOGGLED: "platform.config.flag_toggled",
+    FEATURE_FLAG_DELETED: "platform.config.flag_deleted",
     RUNTIME_SETTING_UPDATED: "platform.config.setting_updated",
+
 
     // Developer Platform Administration
     DEVELOPER_API_KEY_REVOKED: "platform.developer.api_key_revoked",
