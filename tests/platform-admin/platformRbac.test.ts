@@ -187,6 +187,14 @@ describe("Phase 1.19.3 — Platform RBAC Specification & Matrix Suite", () => {
             PLATFORM_SECURITY: true,
             PLATFORM_BILLING: false,
         },
+        [PLATFORM_PERMISSIONS.INTEGRATIONS_REVOKE_CREDENTIALS]: {
+            PLATFORM_OWNER: true,
+            PLATFORM_ADMIN: true,
+            PLATFORM_SUPPORT: false,
+            PLATFORM_OPERATIONS: false,
+            PLATFORM_SECURITY: true,
+            PLATFORM_BILLING: false,
+        },
         [PLATFORM_PERMISSIONS.OPERATIONS_VIEW_QUEUES]: {
             PLATFORM_OWNER: true,
             PLATFORM_ADMIN: true,
@@ -257,8 +265,8 @@ describe("Phase 1.19.3 — Platform RBAC Specification & Matrix Suite", () => {
     }
 
     describe("1. Exhaustive Parameterized Role-to-Permission Matrix Evaluation", () => {
-        it("verifies taxonomy contains exactly 26 concrete permissions", () => {
-            expect(permissions.length).toBe(26);
+        it("verifies taxonomy contains exactly 27 concrete permissions", () => {
+            expect(permissions.length).toBe(27);
         });
 
         it("verifies all 6 platform roles exist in the matrix data table", () => {

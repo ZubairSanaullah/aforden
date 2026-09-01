@@ -34,6 +34,9 @@ export const PLATFORM_PERMISSIONS = {
     DEVELOPER_REVOKE_KEYS: "platform.developer.revoke_keys",
     DEVELOPER_MANAGE_WEBHOOKS: "platform.developer.manage_webhooks",
 
+    // Third-Party Integrations Governance
+    INTEGRATIONS_REVOKE_CREDENTIALS: "platform.integrations.revoke_credentials",
+
     // System Operations & Asynchronous Queues
     OPERATIONS_VIEW_QUEUES: "platform.operations.view_queues",
     OPERATIONS_RETRY_JOBS: "platform.operations.retry_jobs",

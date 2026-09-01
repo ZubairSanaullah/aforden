@@ -36,6 +36,12 @@ export const PLATFORM_AUDIT_EVENTS = {
     DEVELOPER_APP_STATUS_UPDATED: "platform.developer.app_status_updated",
     DEVELOPER_RATE_LIMIT_RESET: "platform.developer.rate_limit_reset",
 
+    // Third-Party Integrations Administration
+    INTEGRATION_CONNECTION_STATUS_UPDATED: "platform.integration.connection_status_updated",
+    INTEGRATION_CREDENTIAL_REVOKED: "platform.integration.credential_revoked",
+    INTEGRATION_CONFIG_UPDATED: "platform.integration.config_updated",
+    INTEGRATION_CONNECTION_TESTED: "platform.integration.connection_tested",
+
     // Operations & Jobs
     JOB_MANUALLY_TRIGGERED: "platform.operations.job_triggered",
     JOB_RETRIED: "platform.operations.job_retried",
@@ -60,6 +66,8 @@ export type PlatformAuditTargetType =
     | "SESSION"
     | "BILLING_PLAN"
     | "INTEGRATION"
+    | "INTEGRATION_CONNECTION"
+    | "INTEGRATION_CREDENTIAL"
     | "QUEUE"
     | "DEVELOPER_APP"
     | "WEBHOOK"
