@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { composeReport } from "@/lib/services/reporting/reportEngine";
-import { serializeReportToCsv } from "@/lib/services/reporting/csvSerializer";
+import { createReportCsvStream } from "@/lib/services/reporting/csvSerializer";
 import { REPORT_KEYS } from "@/lib/services/reporting/reporting.schemas";
 import { ReportNotFoundError } from "@/lib/services/reporting/reportingErrors";
 import {
@@ -127,14 +127,15 @@ export async function GET(
       request.headers.get("accept")?.includes("text/csv");
 
     if (wantsCsv) {
-      const csvData = serializeReportToCsv(reportResponse);
+      const stream = createReportCsvStream(reportResponse);
       const filename = `${reportKey.replace(".", "-")}.csv`;
 
-      return new NextResponse(csvData, {
+      return new NextResponse(stream, {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="${filename}"`,
+          "Transfer-Encoding": "chunked",
         },
       });
     }

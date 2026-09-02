@@ -207,7 +207,7 @@ describe("Phase 1.12.12 — Invoice & Payment Operational History Services", () 
 
             await createInvoice(
                 WS_A,
-                { customerId: "cust_01", title: "HVAC Installation", dueDate: new Date("2026-09-01") },
+                { customerId: "cust_01", title: "HVAC Installation", issueDate: new Date("2026-09-01"), dueDate: new Date("2026-09-01") },
                 adminActor,
             );
 

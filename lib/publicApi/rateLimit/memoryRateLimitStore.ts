@@ -15,12 +15,12 @@ export class MemoryRateLimitStore implements RateLimitStore {
     private lastCleanupTime: number = Date.now();
     private readonly cleanupIntervalMs: number = 60 * 1000; // prune every 60s
 
-    async incrementAndCheck(
+    incrementAndCheckSync(
         key: string,
         limit: number,
         windowMs: number,
         currentTime?: number,
-    ): Promise<RateLimitResult> {
+    ): RateLimitResult {
         const now = currentTime ?? Date.now();
         const windowStart = now - windowMs;
 
@@ -85,6 +85,15 @@ export class MemoryRateLimitStore implements RateLimitStore {
                 retryAfterSeconds,
             };
         }
+    }
+
+    async incrementAndCheck(
+        key: string,
+        limit: number,
+        windowMs: number,
+        currentTime?: number,
+    ): Promise<RateLimitResult> {
+        return this.incrementAndCheckSync(key, limit, windowMs, currentTime);
     }
 
     async reset(key: string): Promise<void> {

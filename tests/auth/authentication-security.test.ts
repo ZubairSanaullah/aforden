@@ -454,6 +454,9 @@ describe("Authentication Security Suite", () => {
                     expires: {
                         gt: expect.any(Date),
                     },
+                    updatedAt: {
+                        gt: expect.any(Date),
+                    },
                 },
                 orderBy: {
                     updatedAt: "desc",

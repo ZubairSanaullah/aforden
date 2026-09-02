@@ -90,6 +90,8 @@ export function resolveWorkspaceId(
 const SENSITIVE_KEYS = new Set([
   "apikey",
   "api_key",
+  "xapikey",
+  "x_api_key",
   "secret",
   "secretkey",
   "secret_key",
@@ -113,6 +115,14 @@ const SENSITIVE_KEYS = new Set([
   "iv",
   "tag",
   "encrypteddek",
+  "stripesecret",
+  "stripe_secret",
+  "webhooksigningkey",
+  "webhook_signing_key",
+  "webhooksecret",
+  "webhook_secret",
+  "signingsecret",
+  "signing_secret",
 ]);
 
 /**
@@ -321,15 +331,18 @@ export function handleIntegrationApiError(
   }
 
   // 9. Unhandled Internal Server Errors (500) - Sanitized
-  const errorMessage =
-    error instanceof Error ? error.message : "An unexpected internal error occurred.";
+  if (_context) {
+    console.error(`[Integration API Error] [${_context}]:`, error);
+  } else {
+    console.error("[Integration API Error]:", error);
+  }
 
   return NextResponse.json(
     {
       success: false,
       error: {
         code: "INTERNAL_SERVER_ERROR",
-        message: errorMessage,
+        message: "An unexpected error occurred while processing the integration request.",
       },
     },
     { status: 500 }

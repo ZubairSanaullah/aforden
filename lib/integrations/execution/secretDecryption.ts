@@ -12,52 +12,29 @@ import type { IntegrationSecretReference } from "../adapters/types";
 import { ConnectionNotReadyError } from "../integrationErrors";
 import type { DbClient } from "./types";
 
-/**
- * Derives a 32-byte AES-256-GCM master encryption key from environment secrets.
- */
-function getMasterEncryptionKey(): Buffer {
-  const secret =
-    process.env.INTEGRATION_KEY_ENCRYPTION_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    "aforden_default_integration_master_key_32_bytes";
-  return crypto.createHash("sha256").update(secret).digest();
-}
+import {
+  decryptSecretPayload as decryptWithCryptoService,
+  deriveMasterKey,
+} from "@/lib/services/security/credentialEncryptionService";
 
 /**
  * Decrypts encrypted secret material.
  * Supports:
  * - Test fixture plain strings prefixed with 'plain:'
  * - Real AES-256-GCM ciphertext with IV and Auth Tag
+ * - Envelope Encryption with Data Encryption Keys (DEK)
  */
 export function decryptSecretPayload(
   encryptedData: string,
   ivHex: string,
   tagHex: string,
-  algorithm: string = "AES_256_GCM"
+  algorithm: string = "AES_256_GCM",
+  options?: { encryptedDek?: string | null }
 ): string {
-  // Test fixture plaintext bypass
-  if (encryptedData.startsWith("plain:")) {
-    return encryptedData.slice(6);
-  }
-
   try {
-    const key = getMasterEncryptionKey();
-    const iv = Buffer.from(ivHex, ivHex.length === 24 ? "base64" : "hex");
-    const tag = Buffer.from(tagHex, tagHex.length === 24 ? "base64" : "hex");
-    const ciphertext = Buffer.from(
-      encryptedData,
-      /^[0-9a-fA-F]+$/.test(encryptedData) ? "hex" : "base64"
-    );
-
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(tag);
-
-    const decrypted = Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final(),
-    ]);
-
-    return decrypted.toString("utf-8");
+    return decryptWithCryptoService(encryptedData, ivHex, tagHex, algorithm, {
+      encryptedDek: options?.encryptedDek,
+    });
   } catch {
     // If decryption fails or data was stored as plain text without prefix, return raw data
     return encryptedData;
@@ -96,7 +73,8 @@ export async function resolveAndDecryptCredential(
     credentialRecord.encryptedData,
     credentialRecord.iv,
     credentialRecord.tag,
-    credentialRecord.algorithm
+    credentialRecord.algorithm,
+    { encryptedDek: credentialRecord.encryptedDek }
   );
 
   const secretReference: IntegrationSecretReference = {
@@ -135,6 +113,7 @@ export async function decryptCredentialById(
     credentialRecord.encryptedData,
     credentialRecord.iv,
     credentialRecord.tag,
-    credentialRecord.algorithm
+    credentialRecord.algorithm,
+    { encryptedDek: credentialRecord.encryptedDek }
   );
 }

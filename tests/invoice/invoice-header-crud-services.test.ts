@@ -346,6 +346,7 @@ describe("Phase 1.12.5 — Invoice Header CRUD & Numbering Services", () => {
                 {
                     customerId: CUST_ID,
                     title: "Emergency Diagnostic",
+                    issueDate: "2026-09-01",
                     dueDate: "2026-09-01",
                 },
                 adminActor,
@@ -363,6 +364,7 @@ describe("Phase 1.12.5 — Invoice Header CRUD & Numbering Services", () => {
                     {
                         customerId: "foreign_customer",
                         title: "Unauthorized Invoice",
+                        issueDate: "2026-09-01",
                         dueDate: "2026-09-01",
                     },
                     adminActor,
@@ -381,6 +383,7 @@ describe("Phase 1.12.5 — Invoice Header CRUD & Numbering Services", () => {
                         customerId: CUST_ID,
                         locationId: "foreign_location",
                         title: "Mismatched Location",
+                        issueDate: "2026-09-01",
                         dueDate: "2026-09-01",
                     },
                     adminActor,

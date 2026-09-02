@@ -402,6 +402,7 @@ describe("Phase 1.12.11 — Referential Integrity & Historical Safety Audit", ()
                 {
                     customerId: "cust_01",
                     title: "Test Concurrent",
+                    issueDate: new Date("2026-09-01"),
                     dueDate: new Date("2026-09-01"),
                 },
                 adminActor,
@@ -529,8 +530,8 @@ describe("Phase 1.12.11 — Referential Integrity & Historical Safety Audit", ()
             mocks.invoiceHistoryCreate.mockResolvedValue({});
 
             const [inv1, inv2] = await Promise.all([
-                createInvoice(WS_A, { customerId: "cust_01", title: "Concurrent 1", dueDate: new Date("2026-09-01") }, adminActor),
-                createInvoice(WS_A, { customerId: "cust_01", title: "Concurrent 2", dueDate: new Date("2026-09-01") }, adminActor),
+                createInvoice(WS_A, { customerId: "cust_01", title: "Concurrent 1", issueDate: new Date("2026-09-01"), dueDate: new Date("2026-09-01") }, adminActor),
+                createInvoice(WS_A, { customerId: "cust_01", title: "Concurrent 2", issueDate: new Date("2026-09-01"), dueDate: new Date("2026-09-01") }, adminActor),
             ]);
 
             expect(inv1.invoiceNumber).not.toBe(inv2.invoiceNumber);

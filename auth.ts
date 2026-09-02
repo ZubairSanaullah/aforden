@@ -1,9 +1,9 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcrypt";
 
 import { prisma } from "@/lib/prisma";
+import { createSlidingSessionAdapter } from "@/lib/services/auth/sessionManagement";
 
 export const {
     handlers,
@@ -11,10 +11,49 @@ export const {
     signOut,
     auth,
 } = NextAuth({
-    adapter: PrismaAdapter(prisma),
+    adapter: createSlidingSessionAdapter(prisma),
 
     session: {
         strategy: "database",
+    },
+
+    cookies: {
+        sessionToken: {
+            name:
+                process.env.NODE_ENV === "production"
+                    ? "__Secure-authjs.session-token"
+                    : "authjs.session-token",
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
+            },
+        },
+        callbackUrl: {
+            name:
+                process.env.NODE_ENV === "production"
+                    ? "__Secure-authjs.callback-url"
+                    : "authjs.callback-url",
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
+            },
+        },
+        csrfToken: {
+            name:
+                process.env.NODE_ENV === "production"
+                    ? "__Host-authjs.csrf-token"
+                    : "authjs.csrf-token",
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
+            },
+        },
     },
 
     providers: [

@@ -6,7 +6,7 @@ import {
     DEFAULT_RATE_LIMIT_CONFIG,
     PublicApiRateLimitConfig,
 } from "./rateLimit.types";
-import { defaultMemoryRateLimitStore } from "./memoryRateLimitStore";
+import { defaultMemoryRateLimitStore, MemoryRateLimitStore } from "./memoryRateLimitStore";
 import { prisma } from "@/lib/prisma";
 import { PlanTier } from "@/generated/prisma/enums";
 import { NON_TERMINAL_SUBSCRIPTION_STATUSES } from "@/lib/services/billing/subscriptionStateMachine";
@@ -133,8 +133,13 @@ export function extractClientIp(request: Request): string {
     return "127.0.0.1";
 }
 
-function hashIp(ip: string): string {
-    return crypto.createHash("sha256").update(ip).digest("hex").substring(0, 32);
+/**
+ * Hashes an arbitrary rate-limit key to a fixed-length hex string.
+ * Named hashRateLimitKey rather than hashIp because it is now used for
+ * composite keys (e.g. workspaceId+sessionToken) in addition to raw IPs.
+ */
+function hashRateLimitKey(key: string): string {
+    return crypto.createHash("sha256").update(key).digest("hex").substring(0, 32);
 }
 
 export interface CheckAuthenticatedRateLimitOptions {
@@ -220,6 +225,71 @@ export interface CheckUnauthenticatedRateLimitOptions {
     now?: number;
 }
 
+export interface CheckSlidingWindowOptions {
+    limit: number;
+    windowMs?: number;
+    store?: MemoryRateLimitStore;
+    now?: number;
+}
+
+/**
+ * General-purpose synchronous sliding-window rate-limit check.
+ *
+ * The caller is responsible for composing a semantically meaningful `bucketKey`
+ * (e.g. `rl:rest:ws:{workspaceId}:{hash}` for workspace actor routes,
+ *  or `rl:unauth:ip:{hash}` for unauthenticated IP routes).
+ * Using an explicit bucket key here avoids the parameter-name mismatch
+ * that previously existed when composite workspace+actor strings were passed
+ * into a parameter named `clientIp`.
+ *
+ * Falls back to "allow" if the active store does not implement
+ * `incrementAndCheckSync` (e.g. a future async-only Redis store).
+ */
+export function checkSlidingWindowSync(
+    bucketKey: string,
+    options: CheckSlidingWindowOptions,
+): RateLimitResult {
+    const store = options.store ?? (activeRateLimitStore as MemoryRateLimitStore);
+    const windowMs = options.windowMs ?? activeRateLimitConfig.windowMs;
+    const { limit } = options;
+    const now = options.now ?? Date.now();
+
+    if (typeof store.incrementAndCheckSync !== "function") {
+        // Graceful fallback: allow the request, headers will reflect limit
+        return {
+            allowed: true,
+            limit,
+            remaining: limit - 1,
+            resetEpochSeconds: Math.ceil((now + windowMs) / 1000),
+            retryAfterSeconds: 0,
+        };
+    }
+
+    return store.incrementAndCheckSync(bucketKey, limit, windowMs, now);
+}
+
+/**
+ * Synchronous rate-limit check for unauthenticated / pre-auth requests, keyed by IP.
+ * Bucket prefix: `rl:unauth:ip:` — reflects that this counter tracks IP-level
+ * unauthenticated traffic (login attempts, password-reset, etc.).
+ *
+ * For authenticated workspace routes, use checkSlidingWindowSync directly with
+ * a `rl:rest:` prefixed bucket key to avoid misleading naming.
+ */
+export function checkUnauthenticatedRateLimitSync(
+    clientIp: string,
+    options?: CheckUnauthenticatedRateLimitOptions,
+): RateLimitResult {
+    const limit =
+        options?.ipLimit ?? activeRateLimitConfig.defaultUnauthenticatedIpLimit;
+    const windowMs = options?.windowMs ?? activeRateLimitConfig.windowMs;
+    const store = options?.store as MemoryRateLimitStore | undefined;
+    const now = options?.now;
+
+    const bucket = `rl:unauth:ip:${hashRateLimitKey(clientIp)}`;
+    return checkSlidingWindowSync(bucket, { limit, windowMs, store, now });
+}
+
 /**
  * Enforces abuse/brute-force rate limiting for unauthenticated / failed-auth requests by IP.
  */
@@ -227,19 +297,7 @@ export async function checkUnauthenticatedRateLimit(
     clientIp: string,
     options?: CheckUnauthenticatedRateLimitOptions,
 ): Promise<RateLimitResult> {
-    const store = options?.store ?? activeRateLimitStore;
-    const windowMs = options?.windowMs ?? activeRateLimitConfig.windowMs;
-    const limit =
-        options?.ipLimit ?? activeRateLimitConfig.defaultUnauthenticatedIpLimit;
-    const now = options?.now ?? Date.now();
-
-    const ipBucket = `rl:unauth:ip:${hashIp(clientIp)}`;
-    const result = await store.incrementAndCheck(ipBucket, limit, windowMs, now);
-
-    return {
-        ...result,
-        tier: "IP",
-    };
+    return checkUnauthenticatedRateLimitSync(clientIp, options);
 }
 
 /**

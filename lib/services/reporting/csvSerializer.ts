@@ -1,4 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
+import { MAX_EXPORT_ROWS } from "./reportingConstants";
+import { ReportCardinalityExceededError } from "./reportingErrors";
 import type {
   MetricValue,
   MetricValueType,
@@ -54,21 +56,25 @@ export function formatMetricCsvValue(
 }
 
 /**
- * Serializes a ReportResponse (SCALARS, ROWS, or SERIES) into an RFC 4180 compliant CSV string.
+ * Generates RFC 4180 compliant CSV chunks iteratively from a ReportResponse.
  *
- * Design Decisions:
- * 1. Divide-by-zero (null) values serialize as empty cells ("").
- * 2. Money/currency fields maintain .toFixed(2) precision.
- * 3. CRLF (\r\n) line terminators are used per RFC 4180.
+ * SEC-04 Hardening:
+ * 1. Streams CSV line-by-line or chunk-by-chunk using a Generator rather than
+ *    allocating the entire output as a single contiguous string in memory.
+ * 2. Enforces MAX_EXPORT_ROWS (50,000) ceiling to prevent memory/CPU exhaustion.
+ * 3. Uses standard CRLF (\r\n) line terminators per RFC 4180.
  */
-export function serializeReportToCsv(report: ReportResponse): string {
+export function* generateReportCsvChunks(
+  report: ReportResponse,
+  chunkSize: number = 100,
+): Generator<string, void, unknown> {
   const meta = report.meta;
-  const lines: string[] = [];
 
   if (meta.shape === "SCALARS") {
     const scalarModel = report as ReportScalarsReadModel;
-    lines.push(["Metric", "Value"].map(escapeCsvCell).join(","));
+    yield ["Metric", "Value"].map(escapeCsvCell).join(",") + "\r\n";
 
+    const lines: string[] = [];
     for (const metric of meta.metrics) {
       const rawVal =
         scalarModel.values[metric.key] ??
@@ -79,8 +85,19 @@ export function serializeReportToCsv(report: ReportResponse): string {
         [escapeCsvCell(metric.label || metric.key), escapeCsvCell(formatted)].join(","),
       );
     }
+    if (lines.length > 0) {
+      yield lines.join("\r\n");
+    }
   } else if (meta.shape === "ROWS") {
     const rowsModel = report as ReportRowsReadModel;
+
+    // SEC-04 Guard: Enforce export ceiling to prevent DoS via unbounded result sets
+    if (rowsModel.items.length > MAX_EXPORT_ROWS) {
+      throw new ReportCardinalityExceededError(
+        `Report export row count (${rowsModel.items.length}) exceeds maximum allowable export ceiling of ${MAX_EXPORT_ROWS} rows.`,
+      );
+    }
+
     const primaryDim = meta.dimensions[0];
     const dimKey = primaryDim?.key ?? "group";
     const dimLabel = primaryDim?.label ?? dimKey;
@@ -89,9 +106,11 @@ export function serializeReportToCsv(report: ReportResponse): string {
       escapeCsvCell(dimLabel),
       ...meta.metrics.map((m) => escapeCsvCell(m.label || m.key)),
     ];
-    lines.push(headers.join(","));
+    yield headers.join(",") + "\r\n";
 
-    for (const row of rowsModel.items) {
+    let buffer: string[] = [];
+    for (let i = 0; i < rowsModel.items.length; i++) {
+      const row = rowsModel.items[i];
       const dimEntry = row.dimensions[dimKey];
       const dimDisplay = dimEntry?.label ?? dimEntry?.key ?? "";
 
@@ -103,18 +122,33 @@ export function serializeReportToCsv(report: ReportResponse): string {
         return escapeCsvCell(formatMetricCsvValue(rawVal, m.valueType));
       });
 
-      lines.push([escapeCsvCell(dimDisplay), ...rowValues].join(","));
+      buffer.push([escapeCsvCell(dimDisplay), ...rowValues].join(","));
+
+      if (buffer.length >= chunkSize || i === rowsModel.items.length - 1) {
+        const isLast = i === rowsModel.items.length - 1;
+        yield buffer.join("\r\n") + (isLast ? "" : "\r\n");
+        buffer = [];
+      }
     }
   } else if (meta.shape === "SERIES") {
     const seriesModel = report as ReportSeriesReadModel;
+
+    if (seriesModel.series.length > MAX_EXPORT_ROWS) {
+      throw new ReportCardinalityExceededError(
+        `Report export series count (${seriesModel.series.length}) exceeds maximum allowable export ceiling of ${MAX_EXPORT_ROWS} rows.`,
+      );
+    }
+
     const headers = [
       escapeCsvCell("Bucket (UTC)"),
       escapeCsvCell("Bucket (Local)"),
       ...meta.metrics.map((m) => escapeCsvCell(m.label || m.key)),
     ];
-    lines.push(headers.join(","));
+    yield headers.join(",") + "\r\n";
 
-    for (const bucket of seriesModel.series) {
+    let buffer: string[] = [];
+    for (let i = 0; i < seriesModel.series.length; i++) {
+      const bucket = seriesModel.series[i];
       const bucketValues = meta.metrics.map((m) => {
         const rawVal =
           bucket.values[m.key] ??
@@ -123,15 +157,58 @@ export function serializeReportToCsv(report: ReportResponse): string {
         return escapeCsvCell(formatMetricCsvValue(rawVal, m.valueType));
       });
 
-      lines.push(
+      buffer.push(
         [
           escapeCsvCell(bucket.bucketStartUtc),
           escapeCsvCell(bucket.bucketLocalLabel),
           ...bucketValues,
         ].join(","),
       );
+
+      if (buffer.length >= chunkSize || i === seriesModel.series.length - 1) {
+        const isLast = i === seriesModel.series.length - 1;
+        yield buffer.join("\r\n") + (isLast ? "" : "\r\n");
+        buffer = [];
+      }
     }
   }
+}
 
-  return lines.join("\r\n");
+/**
+ * Creates a standard Web ReadableStream<Uint8Array> that yields encoded CSV chunks.
+ * Enables zero-buffer chunked HTTP streaming responses for large report exports.
+ */
+export function createReportCsvStream(
+  report: ReportResponse,
+  chunkSize: number = 100,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const generator = generateReportCsvChunks(report, chunkSize);
+
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      try {
+        const { value, done } = generator.next();
+        if (done) {
+          controller.close();
+        } else if (value) {
+          controller.enqueue(encoder.encode(value));
+        }
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+}
+
+/**
+ * Serializes a ReportResponse into an RFC 4180 compliant CSV string.
+ * Retained for backwards compatibility in existing scalar unit tests.
+ */
+export function serializeReportToCsv(report: ReportResponse): string {
+  let result = "";
+  for (const chunk of generateReportCsvChunks(report, 500)) {
+    result += chunk;
+  }
+  return result;
 }

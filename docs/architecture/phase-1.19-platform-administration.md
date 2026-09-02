@@ -145,6 +145,9 @@ export const PLATFORM_PERMISSIONS = {
     DEVELOPER_REVOKE_KEYS: "platform.developer.revoke_keys",
     DEVELOPER_MANAGE_WEBHOOKS: "platform.developer.manage_webhooks",
 
+    // Third-Party Integrations Governance
+    INTEGRATIONS_REVOKE_CREDENTIALS: "platform.integrations.revoke_credentials",
+
     // System Operations & Asynchronous Queues
     OPERATIONS_VIEW_QUEUES: "platform.operations.view_queues",
     OPERATIONS_RETRY_JOBS: "platform.operations.retry_jobs",
@@ -157,7 +160,7 @@ export const PLATFORM_PERMISSIONS = {
 } as const;
 ```
 
-### 2.3 Role-to-Permission Matrix
+### 2.3 Role-to-Permission Matrix (27 Permissions × 6 Roles = 162 Pairs)
 
 | Permission | OWNER | ADMIN | SUPPORT | OPERATIONS | SECURITY | BILLING |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -181,6 +184,7 @@ export const PLATFORM_PERMISSIONS = {
 | `platform.developer.view_apps` | ✓ | ✓ | ✓ | - | ✓ | - |
 | `platform.developer.revoke_keys`| ✓ | ✓ | - | - | ✓ | - |
 | `platform.developer.manage_webhooks`| ✓ | ✓ | - | ✓ | ✓ | - |
+| `platform.integrations.revoke_credentials`| ✓ | ✓ | - | - | ✓ | - |
 | `platform.operations.view_queues`| ✓ | ✓ | - | ✓ | - | - |
 | `platform.operations.retry_jobs`| ✓ | ✓ | - | ✓ | - | - |
 | `platform.operations.purge_stale`| ✓ | - | - | ✓ | - | - |
@@ -234,12 +238,12 @@ export interface PlatformAuditEntry {
     actorEmail: string;
     actorRole: PlatformRole;
     action: PlatformAuditEventType;
-    targetType: "WORKSPACE" | "USER" | "OPERATOR" | "FEATURE_FLAG" | "CONFIG" | "API_KEY" | "JOB" | "SESSION";
+    targetType: PlatformAuditTargetType;
     targetId: string;
     workspaceId?: string | null;
     requestId: string;
     ipAddress: string;
-    userAgent?: string;
+    userAgent?: string | null;
     reason?: string | null;
     previousState?: Record<string, unknown> | null;
     newState?: Record<string, unknown> | null;
@@ -248,7 +252,7 @@ export interface PlatformAuditEntry {
 }
 ```
 
-### 4.2 Platform Audit Event Taxonomy
+### 4.2 Platform Audit Event Taxonomy (33 Canonical Events)
 ```ts
 export const PLATFORM_AUDIT_EVENTS = {
     // Operator Management
@@ -265,18 +269,29 @@ export const PLATFORM_AUDIT_EVENTS = {
 
     // Entitlements & Billing
     ENTITLEMENT_OVERRIDDEN: "platform.billing.entitlement_overridden",
+    ENTITLEMENT_REVOKED: "platform.billing.entitlement_revoked",
     PLAN_ASSIGNED: "platform.billing.plan_assigned",
     BILLING_RESYNCHRONIZED: "platform.billing.resynchronized",
+    BILLING_WEBHOOK_REPLAYED: "platform.billing.webhook_replayed",
 
     // Feature Flags & Config
     FEATURE_FLAG_CREATED: "platform.config.flag_created",
     FEATURE_FLAG_UPDATED: "platform.config.flag_updated",
     FEATURE_FLAG_TOGGLED: "platform.config.flag_toggled",
+    FEATURE_FLAG_DELETED: "platform.config.flag_deleted",
     RUNTIME_SETTING_UPDATED: "platform.config.setting_updated",
 
     // Developer Platform Administration
     DEVELOPER_API_KEY_REVOKED: "platform.developer.api_key_revoked",
     DEVELOPER_WEBHOOK_DISABLED: "platform.developer.webhook_disabled",
+    DEVELOPER_APP_STATUS_UPDATED: "platform.developer.app_status_updated",
+    DEVELOPER_RATE_LIMIT_RESET: "platform.developer.rate_limit_reset",
+
+    // Third-Party Integrations Administration
+    INTEGRATION_CONNECTION_STATUS_UPDATED: "platform.integration.connection_status_updated",
+    INTEGRATION_CREDENTIAL_REVOKED: "platform.integration.credential_revoked",
+    INTEGRATION_CONFIG_UPDATED: "platform.integration.config_updated",
+    INTEGRATION_CONNECTION_TESTED: "platform.integration.connection_tested",
 
     // Operations & Jobs
     JOB_MANUALLY_TRIGGERED: "platform.operations.job_triggered",
@@ -286,6 +301,8 @@ export const PLATFORM_AUDIT_EVENTS = {
     // Security & Sessions
     SECURITY_SESSION_TERMINATED: "platform.security.session_terminated",
     EMERGENCY_ACCESS_INVOKED: "platform.security.emergency_access_invoked",
+    STEP_UP_CHALLENGE_SUCCESS: "platform.security.step_up_challenge_success",
+    STEP_UP_CHALLENGE_FAILED: "platform.security.step_up_challenge_failed",
 } as const;
 ```
 
@@ -365,6 +382,50 @@ When platform operators perform administrative actions on Developer Platform res
 - **Abusive Webhook Teardown**: Calls `updateWebhookEndpoint()` in `lib/publicApi/webhooks/webhookEndpointService.ts`.
 
 This guarantees that developer application state machines, key caches, and domain invariants remain consistent.
+
+### 9.3 Platform Administrative Route Inventory (37 Route Files / 41 Operations)
+The platform control plane under `/api/platform/...` contains exactly 37 route handler files implementing 41 HTTP operations:
+
+| Category / Domain | Route File Path | Exported Methods | Ops |
+| :--- | :--- | :--- | :---: |
+| **Identity & Context** | `/api/platform/me/route.ts` | `GET` | 1 |
+| | `/api/platform/me/permissions/route.ts` | `GET` | 1 |
+| | `/api/platform/rbac/matrix/route.ts` | `GET` | 1 |
+| | `/api/platform/auth/step-up/route.ts` | `POST`, `GET` | 2 |
+| **Audit Ledger** | `/api/platform/audit/route.ts` | `GET` | 1 |
+| **Workspace Governance** | `/api/platform/workspaces/route.ts` | `GET` | 1 |
+| | `/api/platform/workspaces/[workspaceId]/route.ts` | `GET` | 1 |
+| | `/api/platform/workspaces/[workspaceId]/suspend/route.ts` | `POST` | 1 |
+| | `/api/platform/workspaces/[workspaceId]/reactivate/route.ts` | `POST` | 1 |
+| | `/api/platform/workspaces/[workspaceId]/support/route.ts` | `GET` | 1 |
+| **Operator Management** | `/api/platform/operators/route.ts` | `GET`, `POST` | 2 |
+| | `/api/platform/operators/[operatorId]/route.ts` | `DELETE` | 1 |
+| | `/api/platform/operators/[operatorId]/role/route.ts` | `PATCH` | 1 |
+| **Feature Flags** | `/api/platform/flags/route.ts` | `GET`, `POST` | 2 |
+| | `/api/platform/flags/[flagId]/route.ts` | `PATCH`, `DELETE` | 2 |
+| | `/api/platform/flags/[flagId]/toggle/route.ts` | `POST` | 1 |
+| **Runtime Settings** | `/api/platform/settings/route.ts` | `GET` | 1 |
+| | `/api/platform/settings/[key]/route.ts` | `PUT` | 1 |
+| **Developer Governance** | `/api/platform/developer/apps/route.ts` | `GET` | 1 |
+| | `/api/platform/developer/apps/[appId]/status/route.ts` | `PATCH` | 1 |
+| | `/api/platform/developer/keys/[keyId]/revoke/route.ts` | `POST` | 1 |
+| | `/api/platform/developer/webhooks/[webhookId]/disable/route.ts` | `POST` | 1 |
+| | `/api/platform/developer/rate-limits/reset/route.ts` | `POST` | 1 |
+| **Integrations** | `/api/platform/integrations/route.ts` | `GET` | 1 |
+| | `/api/platform/integrations/connections/[connectionId]/status/route.ts` | `PATCH` | 1 |
+| | `/api/platform/integrations/connections/[connectionId]/test/route.ts` | `POST` | 1 |
+| | `/api/platform/integrations/credentials/[credentialId]/revoke/route.ts` | `POST` | 1 |
+| **Billing & Plans** | `/api/platform/billing/accounts/route.ts` | `GET` | 1 |
+| | `/api/platform/billing/plans/route.ts` | `GET` | 1 |
+| | `/api/platform/billing/workspaces/[workspaceId]/plan/route.ts` | `POST` | 1 |
+| | `/api/platform/billing/workspaces/[workspaceId]/entitlements/route.ts` | `POST` | 1 |
+| | `/api/platform/billing/workspaces/[workspaceId]/entitlements/[featureKey]/route.ts` | `DELETE` | 1 |
+| | `/api/platform/billing/workspaces/[workspaceId]/sync/route.ts` | `POST` | 1 |
+| | `/api/platform/billing/webhooks/[eventId]/replay/route.ts` | `POST` | 1 |
+| **System Health** | `/api/platform/health/route.ts` | `GET` | 1 |
+| | `/api/platform/health/queues/route.ts` | `GET` | 1 |
+| | `/api/platform/health/rate-limiter/route.ts` | `GET` | 1 |
+| **Total** | **37 Route Files** | **41 Operations** | **41** |
 
 ---
 

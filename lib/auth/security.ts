@@ -38,4 +38,9 @@ export const SECURITY_RULES = {
      * role or permission configuration.
      */
     HIDE_AUTHORIZATION_DETAILS: true,
-} as const;
+
+    /**
+     * Sliding-window idle timeout for workspace user sessions (4 hours).
+     */
+    WORKSPACE_SESSION_IDLE_TIMEOUT_MS: 4 * 60 * 60 * 1000,
+} as const;

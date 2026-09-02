@@ -1,14 +1,12 @@
-import { prisma } from "@/lib/prisma";
+import {
+    cleanupIdleAndExpiredSessions,
+    WORKSPACE_SESSION_IDLE_TIMEOUT_MS,
+} from "./sessionManagement";
 
-export async function cleanupExpiredSessions(): Promise<number> {
-    const result =
-        await prisma.session.deleteMany({
-            where: {
-                expires: {
-                    lte: new Date(),
-                },
-            },
-        });
-
-    return result.count;
-}
+export async function cleanupExpiredSessions(
+    idleTimeoutMs: number = WORKSPACE_SESSION_IDLE_TIMEOUT_MS,
+    now: Date = new Date(),
+): Promise<number> {
+    const result = await cleanupIdleAndExpiredSessions(idleTimeoutMs, now);
+    return result.totalCount;
+}

@@ -23,6 +23,7 @@ import {
   sanitizePayload,
 } from "@/lib/utils/integrationApiError";
 import { resolveAndDecryptCredential } from "@/lib/integrations/execution/secretDecryption";
+import { encryptSecretPayload } from "@/lib/services/security/credentialEncryptionService";
 
 export interface ListExecutionsQuery {
   page?: number;
@@ -290,24 +291,23 @@ export class IntegrationManagementService {
       const secretStr =
         typeof secretPayload === "string" ? secretPayload : JSON.stringify(secretPayload);
 
-      const fingerprint = `sha256:${crypto.createHash("sha256").update(secretStr).digest("hex").slice(0, 16)}`;
-
-      // Mock AES envelope encryption for database record
-      const iv = crypto.randomBytes(12).toString("hex");
-      const tag = crypto.randomBytes(16).toString("hex");
-      const encryptedData = Buffer.from(secretStr).toString("base64");
+      // Real AES-256-GCM authenticated encryption for database record
+      const encryptedRecord = encryptSecretPayload(secretStr, {
+        keyVaultProvider: "LOCAL_ENCRYPTED_DB",
+        version: 1,
+      });
 
       const cred = await tx.integrationCredential.create({
         data: {
           connectionId: connection!.id,
-          version: 1,
+          version: encryptedRecord.version,
           status: IntegrationCredentialStatus.ACTIVE,
-          keyVaultProvider: "LOCAL_ENCRYPTED_DB",
-          algorithm: "AES_256_GCM",
-          iv,
-          tag,
-          encryptedData,
-          fingerprint,
+          keyVaultProvider: encryptedRecord.keyVaultProvider,
+          algorithm: encryptedRecord.algorithm,
+          iv: encryptedRecord.iv,
+          tag: encryptedRecord.tag,
+          encryptedData: encryptedRecord.encryptedData,
+          fingerprint: encryptedRecord.fingerprint,
         },
       });
 

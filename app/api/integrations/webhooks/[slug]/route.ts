@@ -12,8 +12,10 @@ export async function POST(
   request: Request,
   props: { params: Promise<{ slug: string }> }
 ) {
+  let endpointSlug = "unknown";
   try {
     const { slug } = await props.params;
+    endpointSlug = slug;
 
     // Capture raw body text/bytes before any middleware/JSON parsing interferes
     const rawBody = await request.text();
@@ -42,13 +44,13 @@ export async function POST(
       headers: result.responseHeaders,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unexpected webhook handler failure.";
+    console.error(`[Inbound Webhook Route Error] [${endpointSlug}]:`, err);
     return NextResponse.json(
       {
         success: false,
         error: {
           code: "INTERNAL_SERVER_ERROR",
-          message,
+          message: "An unexpected error occurred while processing the webhook.",
         },
       },
       { status: 500 }

@@ -7,39 +7,57 @@ import {
     REQUEST_ID_HEADER_NAME,
     jsonError,
 } from "@/lib/publicApi";
+import { applyApiSecurityMiddleware } from "@/lib/api/apiSecurityMiddleware";
+import {
+    applySecurityHeaders,
+    applyPublicApiCorsHeaders,
+    handlePublicApiPreflight,
+} from "@/lib/api/securityHeaders";
 
 /**
- * Next.js Edge / Request Middleware for Public API routing.
+ * Next.js Request Middleware for Global Security, Routing & Transport Hardening.
  *
  * Responsibilities:
- * 1. Intercepts versioned public API requests (/api/v...).
- * 2. Rejects unsupported API versions (e.g. /api/v0, /api/v2) with HTTP 404
- *    and canonical API_VERSION_UNSUPPORTED error contract.
- * 3. Extracts / validates / injects standard X-Request-Id header.
- * 4. Leaves internal /api/... routes completely unaffected.
+ * 1. Attaches canonical browser security headers (CSP, HSTS, X-Frame-Options,
+ *    X-Content-Type-Options, Referrer-Policy, Permissions-Policy) across all routes.
+ * 2. Manages CORS for Public API (/api/v1/*), including OPTIONS preflight.
+ * 3. Enforces API version routing and rejects unsupported versions with HTTP 404.
+ * 4. Enforces global API rate limiting & request body size limits (/api/...).
+ * 5. Injects standard X-Request-Id header across all API requests.
  */
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+    const method = request.method.toUpperCase();
 
+    // 1. Versioned Public API CORS & Routing (/api/v...)
     if (pathname.startsWith("/api/v")) {
         const parsed = parseApiVersionFromPath(pathname);
 
         if (parsed.isPublicApi) {
+            // Handle CORS preflight OPTIONS request
+            if (method === "OPTIONS") {
+                return handlePublicApiPreflight();
+            }
+
             const rawHeader = request.headers.get(REQUEST_ID_HEADER_NAME);
             const { requestId } = resolveRequestId(rawHeader);
 
             if (!parsed.isSupported) {
-                return jsonError(
+                const errorResponse = jsonError(
                     "API_VERSION_UNSUPPORTED",
                     `The requested API version '${parsed.version}' is not supported. Supported versions: ${SUPPORTED_VERSIONS_HEADER_VALUE}.`,
                     {
                         status: 404,
                         requestId,
                         headers: {
-                            [SUPPORTED_VERSIONS_HEADER_NAME]: SUPPORTED_VERSIONS_HEADER_VALUE,
+                            [SUPPORTED_VERSIONS_HEADER_NAME]:
+                                SUPPORTED_VERSIONS_HEADER_VALUE,
                         },
                     },
                 );
+                applySecurityHeaders(errorResponse.headers);
+                applyPublicApiCorsHeaders(errorResponse.headers);
+                return errorResponse;
             }
 
             const requestHeaders = new Headers(request.headers);
@@ -51,13 +69,27 @@ export function middleware(request: NextRequest) {
                 },
             });
             response.headers.set(REQUEST_ID_HEADER_NAME, requestId);
+            applySecurityHeaders(response.headers);
+            applyPublicApiCorsHeaders(response.headers);
             return response;
         }
     }
 
-    return NextResponse.next();
+    // 2. Global REST API Security, Rate Limiting & Body Size Cap (/api/*)
+    if (pathname.startsWith("/api/")) {
+        const securityResponse = applyApiSecurityMiddleware(request);
+        if (securityResponse) {
+            // Security error responses (413, 429) already have security headers attached
+            return securityResponse;
+        }
+    }
+
+    // 3. Downstream Response with Canonical Security Headers
+    const response = NextResponse.next();
+    applySecurityHeaders(response.headers);
+    return response;
 }
 
 export const config = {
-    matcher: ["/api/v:path*"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

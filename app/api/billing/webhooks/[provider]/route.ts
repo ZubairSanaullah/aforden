@@ -47,9 +47,10 @@ export async function POST(request: Request, context: RouteContext) {
         rawBody,
         signature,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error(`[Billing Webhook Signature Error] [${provider}]:`, err);
       return NextResponse.json(
-        { success: false, error: err?.message || "Invalid signature" },
+        { success: false, error: "Invalid webhook signature or payload." },
         { status: 400 },
       );
     }

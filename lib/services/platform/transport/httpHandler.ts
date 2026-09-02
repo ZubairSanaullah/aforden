@@ -230,8 +230,8 @@ export function handlePlatformError(error: unknown): NextResponse {
     }
 
     // Generic fallback: never expose raw stack or uncaught internal details
-    const message = error instanceof Error ? error.message : "An unexpected platform error occurred.";
-    return jsonError(message, 500, "INTERNAL_ERROR");
+    console.error("[Platform Transport Error]:", error);
+    return jsonError("An unexpected platform error occurred.", 500, "INTERNAL_ERROR");
 }
 
 export interface PlatformRouteOptions {
