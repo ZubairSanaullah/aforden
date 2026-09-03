@@ -17,6 +17,7 @@ import {
     SCHEDULE_APPOINTMENT_INCLUDE,
 } from "./scheduleReadModel";
 import { checkTechnicianAvailability } from "./checkTechnicianAvailability";
+import { assertNoTechnicianConflicts } from "./conflictDetection";
 import { recordScheduleHistory } from "./recordScheduleHistory";
 import type { ScheduleAppointmentReadModel } from "./schedule.types";
 import {
@@ -149,6 +150,24 @@ export async function createSchedule(
     for (let attempt = 0; attempt < MAX_NUMBER_GENERATION_ATTEMPTS; attempt++) {
         try {
             const created = await runTx(async (tx) => {
+                // Phase 1.21.6: Acquire exclusive lock on technician profile to serialize concurrent bookings
+                if (typeof tx?.technicianProfile?.update === "function") {
+                    await tx.technicianProfile.update({
+                        where: { id: data.technicianId },
+                        data: { updatedAt: new Date() },
+                    });
+                }
+
+                // Re-evaluate overlap conflict detection inside atomic transaction
+                if (typeof tx?.scheduleAppointment?.findMany === "function") {
+                    await assertNoTechnicianConflicts(tx, {
+                        workspaceId,
+                        technicianId: data.technicianId,
+                        scheduledStart: data.scheduledStart,
+                        scheduledEnd: data.scheduledEnd,
+                    });
+                }
+
                 // Compute next sequential appointment number
                 const latest = await tx.scheduleAppointment.findFirst({
                     where: {
