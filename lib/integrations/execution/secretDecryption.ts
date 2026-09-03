@@ -31,14 +31,9 @@ export function decryptSecretPayload(
   algorithm: string = "AES_256_GCM",
   options?: { encryptedDek?: string | null }
 ): string {
-  try {
-    return decryptWithCryptoService(encryptedData, ivHex, tagHex, algorithm, {
-      encryptedDek: options?.encryptedDek,
-    });
-  } catch {
-    // If decryption fails or data was stored as plain text without prefix, return raw data
-    return encryptedData;
-  }
+  return decryptWithCryptoService(encryptedData, ivHex, tagHex, algorithm, {
+    encryptedDek: options?.encryptedDek,
+  });
 }
 
 /**

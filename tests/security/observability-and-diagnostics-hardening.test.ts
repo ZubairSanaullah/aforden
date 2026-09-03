@@ -8,7 +8,9 @@
  * 4. In-Memory Rate Limiter Health & Diagnostics (/api/platform/health/rate-limiter).
  * 5. Workspace Support Diagnostics (/api/platform/workspaces/:workspaceId/support) audit and redaction.
  * 6. Public API Connectivity Probe (/api/v1/ping) scope authorization.
- * 7. Diagnostic Logging & Error Sanitization (zero credential or connection string leakage).
+ * 7. Provider Connection Health Verification (/api/integrations/:integrationId/test).
+ * 8. Dead Letter Queue Diagnostics (/api/automations/dlq).
+ * 9. Diagnostic Logging & Error Sanitization (zero credential or connection string leakage).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -21,11 +23,35 @@ import { GET as publicHealthGet } from "@/app/api/health/route";
 import { GET as platformHealthGet } from "@/app/api/platform/health/route";
 import { GET as platformQueuesGet } from "@/app/api/platform/health/queues/route";
 import { GET as platformRateLimiterGet } from "@/app/api/platform/health/rate-limiter/route";
+import { GET as platformSupportGet } from "@/app/api/platform/workspaces/[workspaceId]/support/route";
 import { GET as publicPingGet } from "@/app/api/v1/ping/route";
+import { POST as integrationTestPost } from "@/app/api/integrations/[integrationId]/test/route";
+import { GET as automationsDlqGet } from "@/app/api/automations/dlq/route";
+
 import { prisma } from "@/lib/prisma";
-import { getPlatformSystemHealthSummary, getPlatformDatabaseHealth } from "@/lib/services/platform/health";
-import { PlatformAuthorizationContext, PLATFORM_PERMISSIONS } from "@/lib/services/platform/authorization";
+import {
+  getPlatformSystemHealthSummary,
+  getPlatformDatabaseHealth,
+  getPlatformQueueHealth,
+  getPlatformRateLimiterBlockerStatus,
+} from "@/lib/services/platform/health";
+import { PlatformAuthorizationContext } from "@/lib/services/platform/authorization";
 import { sanitizePayload, maskCredentialSummary } from "@/lib/utils/integrationApiError";
+import * as authService from "@/lib/publicApi/auth";
+
+const mockAdminContext: PlatformAuthorizationContext = {
+  userId: "usr_platform_admin_1",
+  email: "admin@aforden.com",
+  name: "Admin User",
+  avatarUrl: null,
+  platformRole: "PLATFORM_ADMIN" as any,
+  profileId: "prof_1",
+  status: "ACTIVE" as any,
+  lastActiveAt: new Date(),
+  lastLoginAt: new Date(),
+  stepUpConfirmedAt: new Date(),
+  metadata: null,
+};
 
 describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening", () => {
   beforeEach(() => {
@@ -113,21 +139,7 @@ describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening"
       vi.spyOn(prisma.platformRuntimeSetting, "count").mockResolvedValue(5);
       vi.spyOn(prisma.platformFeatureFlag, "count").mockResolvedValue(3);
 
-      const adminContext: PlatformAuthorizationContext = {
-        userId: "usr_platform_admin_1",
-        email: "admin@aforden.com",
-        name: "Admin User",
-        avatarUrl: null,
-        platformRole: "PLATFORM_ADMIN" as any,
-        profileId: "prof_1",
-        status: "ACTIVE" as any,
-        lastActiveAt: new Date(),
-        lastLoginAt: new Date(),
-        stepUpConfirmedAt: new Date(),
-        metadata: null,
-      };
-
-      const summary = await getPlatformSystemHealthSummary(adminContext);
+      const summary = await getPlatformSystemHealthSummary(mockAdminContext);
       expect(summary.status).toBe("DEGRADED"); // Degraded due to single-instance in-memory rate limiter blocker
       expect(summary.subsystems.database.status).toBe("HEALTHY");
       expect(summary.subsystems.queues.status).toBe("HEALTHY");
@@ -146,21 +158,7 @@ describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening"
     it("accurately reports UNHEALTHY when database connectivity is degraded or failed", async () => {
       vi.spyOn(prisma, "$queryRaw").mockRejectedValueOnce(new Error("Connection refused"));
 
-      const adminContext: PlatformAuthorizationContext = {
-        userId: "usr_platform_admin_1",
-        email: "admin@aforden.com",
-        name: "Admin User",
-        avatarUrl: null,
-        platformRole: "PLATFORM_ADMIN" as any,
-        profileId: "prof_1",
-        status: "ACTIVE" as any,
-        lastActiveAt: new Date(),
-        lastLoginAt: new Date(),
-        stepUpConfirmedAt: new Date(),
-        metadata: null,
-      };
-
-      const dbHealth = await getPlatformDatabaseHealth(adminContext);
+      const dbHealth = await getPlatformDatabaseHealth(mockAdminContext);
       expect(dbHealth.status).toBe("UNHEALTHY");
       expect(dbHealth.connectionPool.isResponsive).toBe(false);
       expect(dbHealth.latencyMs).toBe(-1);
@@ -168,26 +166,91 @@ describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening"
   });
 
   // =========================================================================
-  // 3. Queue & Rate Limiter Telemetry Endpoints
+  // 3. Queue Health Telemetry Endpoint (/api/platform/health/queues)
   // =========================================================================
-  describe("3. Queue & Rate Limiter Telemetry Endpoints", () => {
-    it("GET /api/platform/health/queues rejects unauthenticated caller", async () => {
+  describe("3. Queue Health Telemetry Endpoint (/api/platform/health/queues)", () => {
+    it("rejects unauthenticated caller with HTTP 401 UNAUTHORIZED", async () => {
       const req = new Request("http://localhost:3000/api/platform/health/queues");
       const res = await platformQueuesGet(req as any, {} as any);
       expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHORIZED");
     });
 
-    it("GET /api/platform/health/rate-limiter rejects unauthenticated caller", async () => {
-      const req = new Request("http://localhost:3000/api/platform/health/rate-limiter");
-      const res = await platformRateLimiterGet(req as any, {} as any);
-      expect(res.status).toBe(401);
+    it("returns queue health telemetry with zero customer payload leakage", async () => {
+      vi.spyOn(prisma.notificationOutbox, "count").mockResolvedValue(0);
+      vi.spyOn(prisma.automationExecution, "count").mockResolvedValue(0);
+      vi.spyOn(prisma.automationScheduleJob, "count").mockResolvedValue(0);
+      vi.spyOn(prisma.webhookDelivery, "count").mockResolvedValue(0);
+      vi.spyOn(prisma.billingWebhookEvent, "count").mockResolvedValue(0);
+
+      const queueHealth = await getPlatformQueueHealth(mockAdminContext);
+      expect(queueHealth.status).toBe("HEALTHY");
+      expect(queueHealth.notificationOutbox.pending).toBe(0);
+      expect(queueHealth.automationExecutions.failed).toBe(0);
+
+      const serialized = JSON.stringify(queueHealth);
+      expect(serialized).not.toContain("payload");
+      expect(serialized).not.toContain("recipientEmail");
     });
   });
 
   // =========================================================================
-  // 4. Public API Connectivity Probe (/api/v1/ping)
+  // 4. Rate Limiter Health & Blocker Diagnostics (/api/platform/health/rate-limiter)
   // =========================================================================
-  describe("4. Public API Connectivity Probe (/api/v1/ping)", () => {
+  describe("4. Rate Limiter Health & Blocker Diagnostics (/api/platform/health/rate-limiter)", () => {
+    it("rejects unauthenticated caller with HTTP 401 UNAUTHORIZED", async () => {
+      const req = new Request("http://localhost:3000/api/platform/health/rate-limiter");
+      const res = await platformRateLimiterGet(req as any, {} as any);
+      expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHORIZED");
+    });
+
+    it("surfaces in-memory rate limiter blocker code and multi-instance risk", async () => {
+      const blocker = await getPlatformRateLimiterBlockerStatus(mockAdminContext);
+      expect(blocker.status).toBe("DEGRADED");
+      expect(blocker.isInMemoryStore).toBe(true);
+      expect(blocker.isDistributed).toBe(false);
+      expect(blocker.blockerCode).toBe("PHASE_1_18_IN_MEMORY_RATE_LIMITER");
+      expect(blocker.multiInstanceRisk).toBe("HIGH");
+      expect(blocker.activeStoreName).toBe("MemoryRateLimitStore");
+    });
+  });
+
+  // =========================================================================
+  // 5. Workspace Support Diagnostics (/api/platform/workspaces/[workspaceId]/support)
+  // =========================================================================
+  describe("5. Workspace Support Diagnostics (/api/platform/workspaces/:workspaceId/support)", () => {
+    it("rejects unauthenticated caller with HTTP 401 UNAUTHORIZED", async () => {
+      const req = new Request("http://localhost:3000/api/platform/workspaces/ws_123/support");
+      const res = await platformSupportGet(req as any, { params: Promise.resolve({ workspaceId: "ws_123" }) } as any);
+      expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHORIZED");
+    });
+
+    it("returns HTTP 404 with standard error envelope when workspace does not exist", async () => {
+      const { getWorkspaceSupportDiagnostics } = await import("@/lib/services/platform/support");
+      vi.spyOn(prisma.platformAuditLog, "create").mockResolvedValueOnce({ id: "audit_1" } as any);
+      vi.spyOn(prisma.workspace, "findUnique").mockResolvedValueOnce(null);
+
+      await expect(
+        getWorkspaceSupportDiagnostics(mockAdminContext, "ws_nonexistent", {})
+      ).rejects.toThrow("Workspace 'ws_nonexistent' was not found");
+    });
+  });
+
+  // =========================================================================
+  // 6. Public API Connectivity Probe (/api/v1/ping)
+  // =========================================================================
+  describe("6. Public API Connectivity Probe (/api/v1/ping)", () => {
     it("rejects unauthenticated request lacking Authorization header with HTTP 401", async () => {
       const req = new Request("http://localhost:3000/api/v1/ping");
       const res = await publicPingGet(req);
@@ -195,22 +258,70 @@ describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening"
 
       const body = await res.json();
       expect(body.error.code).toBe("UNAUTHORIZED");
+      expect(body.error.message).toContain("Invalid or missing API key.");
+    });
+
+    it("rejects invalid API key with HTTP 401 UNAUTHORIZED", async () => {
+      vi.spyOn(prisma.apiKey, "findFirst").mockResolvedValueOnce(null);
+
+      const req = new Request("http://localhost:3000/api/v1/ping", {
+        headers: { authorization: "Bearer invalid_api_key_test_9999" },
+      });
+      const res = await publicPingGet(req);
+      expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.error.code).toBe("UNAUTHORIZED");
+      expect(body.error.message).toContain("Invalid or missing API key.");
+    });
+
+    it("returns HTTP 200 with application details when authenticated with valid ping:read scope", async () => {
+      vi.spyOn(authService, "authenticatePublicApiRequest").mockResolvedValueOnce({
+        apiKeyId: "key_test_123",
+        developerApplicationId: "app_test_123",
+        developerApplicationName: "Telemetry Probe Test",
+        workspaceId: "ws_test_123",
+        environment: "TEST" as any,
+        scopes: ["ping:read"],
+      });
+      vi.spyOn(prisma.apiRequestLog, "create").mockResolvedValueOnce({
+        id: "log_1",
+        workspaceId: "ws_test_123",
+        apiKeyId: "key_test_123",
+        developerApplicationId: "app_test_123",
+        requestId: "req_123",
+        endpoint: "/api/v1/ping",
+        httpMethod: "GET",
+        ipHash: "hash123",
+        statusCode: 200,
+        responseTimeMs: 5,
+        rateLimited: false,
+        rateLimitTier: "STANDARD",
+        requestHeaders: {},
+        requestPayload: null,
+        responsePayload: null,
+        errorMessage: null,
+        createdAt: new Date(),
+      } as any);
+
+      const req = new Request("http://localhost:3000/api/v1/ping", {
+        headers: { authorization: "Bearer afd_live_valid1234567890123456" },
+      });
+      const res = await publicPingGet(req);
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.data.status).toBe("ok");
+      expect(body.data.message).toBe("Aforden Public API v1 is operational");
+      expect(body.data.application).toBe("Telemetry Probe Test");
     });
   });
 
   // =========================================================================
-  // 5. Workspace Support Diagnostics & Integration Test Routes
+  // 7. Provider Connection Health Verification (/api/integrations/[integrationId]/test)
   // =========================================================================
-  describe("5. Workspace Support Diagnostics & Integration Test Routes", () => {
-    it("GET /api/platform/workspaces/:workspaceId/support rejects unauthenticated caller with 401", async () => {
-      const { GET: supportGet } = await import("@/app/api/platform/workspaces/[workspaceId]/support/route");
-      const req = new Request("http://localhost:3000/api/platform/workspaces/ws_123/support");
-      const res = await supportGet(req as any, { params: Promise.resolve({ workspaceId: "ws_123" }) } as any);
-      expect(res.status).toBe(401);
-    });
-
-    it("POST /api/integrations/:integrationId/test rejects missing workspace context with 400", async () => {
-      const { POST: integrationTestPost } = await import("@/app/api/integrations/[integrationId]/test/route");
+  describe("7. Provider Connection Health Verification (/api/integrations/:integrationId/test)", () => {
+    it("rejects missing workspace context with HTTP 400 MISSING_WORKSPACE", async () => {
       const req = new Request("http://localhost:3000/api/integrations/int_quickbooks/test", {
         method: "POST",
       });
@@ -222,12 +333,48 @@ describe("Phase 1.20.11 — Observability, Diagnostics & Health-Check Hardening"
       const body = await res.json();
       expect(body.error.code).toBe("MISSING_WORKSPACE");
     });
+
+    it("rejects unauthenticated caller with HTTP 401 UNAUTHORIZED", async () => {
+      const req = new Request("http://localhost:3000/api/integrations/int_quickbooks/test?workspaceId=ws_123", {
+        method: "POST",
+      });
+      const res = await integrationTestPost(req, {
+        params: Promise.resolve({ integrationId: "int_quickbooks" }),
+      });
+      expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.error.code).toBe("UNAUTHORIZED");
+    });
   });
 
   // =========================================================================
-  // 6. Diagnostic Logging & Error Redaction Guarantees
+  // 8. Dead Letter Queue Diagnostics (/api/automations/dlq)
   // =========================================================================
-  describe("6. Diagnostic Logging & Error Redaction Guarantees", () => {
+  describe("8. Dead Letter Queue Diagnostics (/api/automations/dlq)", () => {
+    it("rejects missing workspace context with HTTP 400 MISSING_WORKSPACE", async () => {
+      const req = new Request("http://localhost:3000/api/automations/dlq");
+      const res = await automationsDlqGet(req);
+      expect(res.status).toBe(400);
+
+      const body = await res.json();
+      expect(body.error.code).toBe("MISSING_WORKSPACE");
+    });
+
+    it("rejects unauthenticated caller with HTTP 401 UNAUTHORIZED", async () => {
+      const req = new Request("http://localhost:3000/api/automations/dlq?workspaceId=ws_123");
+      const res = await automationsDlqGet(req);
+      expect(res.status).toBe(401);
+
+      const body = await res.json();
+      expect(body.error.code).toBe("UNAUTHORIZED");
+    });
+  });
+
+  // =========================================================================
+  // 9. Diagnostic Logging & Error Redaction Guarantees
+  // =========================================================================
+  describe("9. Diagnostic Logging & Error Redaction Guarantees", () => {
     it("sanitizes payloads removing Stripe secrets, tokens, and authorization headers", () => {
       const diagnosticTelemetry = {
         endpoint: "/api/v1/work-orders",

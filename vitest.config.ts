@@ -6,6 +6,22 @@ export default defineConfig({
         environment: "node",
         globals: false,
         maxWorkers: 3,
+        testTimeout: 30000,
+        hookTimeout: 30000,
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "json-summary"],
+            include: ["app/**", "lib/**", "auth.ts", "middleware.ts"],
+            exclude: [
+                "node_modules/**",
+                "tests/**",
+                "**/*.test.ts",
+                "**/*.spec.ts",
+                "**/*.d.ts",
+                "generated/**",
+                ".next/**",
+            ],
+        },
     },
 
     resolve: {
