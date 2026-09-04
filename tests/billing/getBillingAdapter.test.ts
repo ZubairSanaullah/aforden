@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getBillingAdapter } from "@/lib/services/billing/providers/getBillingAdapter";
 import { StripeBillingAdapter } from "@/lib/services/billing/providers/stripeBillingAdapter";
+import { PaddleBillingAdapter } from "@/lib/services/billing/providers/paddleBillingAdapter";
 import { MockBillingAdapter } from "@/lib/services/billing/providers/mockBillingAdapter";
 import { BillingProviderType } from "@/generated/prisma/enums";
 
@@ -21,6 +22,31 @@ describe("Phase 1.15.3 — getBillingAdapter Factory Tests", () => {
       );
     } finally {
       if (prevKey) process.env.STRIPE_SECRET_KEY = prevKey;
+    }
+  });
+
+  it("should return a PaddleBillingAdapter instance when provider is PADDLE and apiKey is provided", () => {
+    const adapter = getBillingAdapter(BillingProviderType.PADDLE, { apiKey: "paddlesecret_mock123" });
+    expect(adapter).toBeInstanceOf(PaddleBillingAdapter);
+    expect(adapter.providerName).toBe("PADDLE");
+  });
+
+  it("should return a PaddleBillingAdapter instance when provider is string 'PADDLE'", () => {
+    const adapter = getBillingAdapter("PADDLE", { apiKey: "paddlesecret_mock123" });
+    expect(adapter).toBeInstanceOf(PaddleBillingAdapter);
+    expect(adapter.providerName).toBe("PADDLE");
+  });
+
+  it("should throw configuration error if PADDLE is requested without apiKey or PADDLE_API_KEY", () => {
+    const prevKey = process.env.PADDLE_API_KEY;
+    delete process.env.PADDLE_API_KEY;
+
+    try {
+      expect(() => getBillingAdapter(BillingProviderType.PADDLE)).toThrow(
+        "Paddle API key is not configured. Please provide 'apiKey' or set 'PADDLE_API_KEY' in the environment."
+      );
+    } finally {
+      if (prevKey) process.env.PADDLE_API_KEY = prevKey;
     }
   });
 

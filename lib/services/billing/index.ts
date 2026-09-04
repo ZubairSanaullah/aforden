@@ -15,5 +15,6 @@ export * from "./checkoutService";
 export * from "./planChangeService";
 export * from "./portalService";
 export * from "./webhookService";
+export * from "./paddleWebhookMapper";
 export * from "./dunningService";
 export * from "./reconciliationService";

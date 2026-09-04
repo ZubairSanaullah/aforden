@@ -117,14 +117,23 @@ export async function createSubscription(
   } catch (err: any) {
     // Catch database partial unique index violation (race condition defense)
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const conflicting = await tx.subscription.findFirst({
-        where: {
-          accountId: params.accountId,
-          status: { in: NON_TERMINAL_SUBSCRIPTION_STATUSES as any },
-        },
-        select: { id: true },
-      });
-      throw new DuplicateActiveSubscriptionError(params.accountId, conflicting?.id);
+      let conflictingId: string | undefined;
+      try {
+        const conflicting = await tx.subscription.findFirst({
+          where: {
+            accountId: params.accountId,
+            status: { in: NON_TERMINAL_SUBSCRIPTION_STATUSES as any },
+          },
+          select: { id: true },
+        });
+        conflictingId = conflicting?.id;
+      } catch (lookupErr: any) {
+        // If PostgreSQL transaction is already in aborted state (or lookup fails), log warning and continue
+        console.warn(
+          `[subscriptionService:createSubscription] Conflicting subscription lookup failed following P2002: ${lookupErr?.message || lookupErr}`
+        );
+      }
+      throw new DuplicateActiveSubscriptionError(params.accountId, conflictingId);
     }
     throw err;
   }

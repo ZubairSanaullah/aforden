@@ -28,10 +28,11 @@ describe("Phase 1.17.2 — Platform Integration Catalog Seed", () => {
     }
   });
 
-  it("should define 5 standard catalog entries in SEED_INTEGRATIONS", () => {
-    expect(SEED_INTEGRATIONS).toHaveLength(5);
+  it("should define standard catalog entries in SEED_INTEGRATIONS including Brevo", () => {
+    expect(SEED_INTEGRATIONS).toHaveLength(6);
     const ids = SEED_INTEGRATIONS.map((i) => i.id);
     expect(ids).toContain("resend");
+    expect(ids).toContain("brevo");
     expect(ids).toContain("twilio");
     expect(ids).toContain("quickbooks_online");
     expect(ids).toContain("google_calendar");
@@ -41,8 +42,8 @@ describe("Phase 1.17.2 — Platform Integration Catalog Seed", () => {
   it("should idempotently seed the integration catalog", async () => {
     // First run
     const result1 = await seedIntegrationCatalog(prisma);
-    expect(result1.seededCount).toBe(5);
-    expect(result1.integrations).toHaveLength(5);
+    expect(result1.seededCount).toBe(6);
+    expect(result1.integrations).toHaveLength(6);
 
     // Verify entries in DB
     const resend = await prisma.integration.findUnique({ where: { id: "resend" } });
@@ -52,6 +53,14 @@ describe("Phase 1.17.2 — Platform Integration Catalog Seed", () => {
     expect(resend?.capabilities).toContain(IntegrationCapability.EMAIL_SEND);
     expect(resend?.capabilities).toContain(IntegrationCapability.WEBHOOK_RECEIVE);
     expect(resend?.authType).toBe("API_KEY");
+
+    const brevo = await prisma.integration.findUnique({ where: { id: "brevo" } });
+    expect(brevo).toBeDefined();
+    expect(brevo?.name).toBe("Brevo");
+    expect(brevo?.status).toBe(IntegrationStatus.ACTIVE);
+    expect(brevo?.capabilities).toContain(IntegrationCapability.EMAIL_SEND);
+    expect(brevo?.capabilities).toContain(IntegrationCapability.WEBHOOK_RECEIVE);
+    expect(brevo?.authType).toBe("API_KEY");
 
     const quickbooks = await prisma.integration.findUnique({ where: { id: "quickbooks_online" } });
     expect(quickbooks).toBeDefined();
@@ -66,6 +75,6 @@ describe("Phase 1.17.2 — Platform Integration Catalog Seed", () => {
 
     // Second run (Idempotency test)
     const result2 = await seedIntegrationCatalog(prisma);
-    expect(result2.seededCount).toBe(5);
+    expect(result2.seededCount).toBe(6);
   });
 });

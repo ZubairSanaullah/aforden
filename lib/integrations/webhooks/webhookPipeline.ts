@@ -33,6 +33,7 @@ import { CREDENTIAL_SUPERSEDED_GRACE_PERIOD_MS } from "../credentialStateMachine
 import {
   verifyWebhookSignature,
   extractSignatureAndTimestamp,
+  resolveCredentialSecret,
 } from "./signatureVerification";
 import type {
   WebhookProcessingResult,
@@ -208,6 +209,19 @@ export async function processInboundWebhook(
       if (typeof pEventId === "string" && pEventId.trim().length > 0) {
         candidateReplayKeys.push(pEventId.trim());
       }
+      // Synthetic event ID for Brevo transactional webhooks (message-id + event + date + link + reason)
+      if (preview.event && (preview["message-id"] || preview.messageId)) {
+        const msgId = preview["message-id"] || preview.messageId;
+        const dt = preview.date || preview.ts_event || preview.ts || "";
+        const link = typeof preview.link === "string" ? preview.link : "";
+        const reason = typeof preview.reason === "string" ? preview.reason : "";
+        const hash = crypto
+          .createHash("sha256")
+          .update(`${msgId}:${preview.event}:${dt}:${link}:${reason}`)
+          .digest("hex")
+          .slice(0, 32);
+        candidateReplayKeys.push(`evt_brevo_${hash}`);
+      }
     }
   } catch {
     // Ignore JSON parse error at preview stage
@@ -341,10 +355,26 @@ export async function processInboundWebhook(
     };
   }
 
+  const brevoSyntheticEventId =
+    parsedPayload.event && (parsedPayload["message-id"] || parsedPayload.messageId)
+      ? `evt_brevo_${crypto
+          .createHash("sha256")
+          .update(
+            `${parsedPayload["message-id"] || parsedPayload.messageId}:${parsedPayload.event}:${
+              parsedPayload.date || parsedPayload.ts_event || parsedPayload.ts || ""
+            }:${typeof parsedPayload.link === "string" ? parsedPayload.link : ""}:${
+              typeof parsedPayload.reason === "string" ? parsedPayload.reason : ""
+            }`
+          )
+          .digest("hex")
+          .slice(0, 32)}`
+      : undefined;
+
   const rawProviderEventId =
     (parsedPayload.eventId as string) ||
-    (parsedPayload.id as string) ||
     (parsedPayload.event_id as string) ||
+    brevoSyntheticEventId ||
+    (typeof parsedPayload.id === "string" ? parsedPayload.id : undefined) ||
     candidateReplayKeys[0] ||
     `digest:${payloadDigest}`;
 
@@ -418,6 +448,11 @@ export async function processInboundWebhook(
     (c) => c.status === IntegrationCredentialStatus.ACTIVE
   );
 
+  let secretPayload: string | undefined;
+  if (activeCred) {
+    secretPayload = await resolveCredentialSecret(activeCred, options.customSecretResolver);
+  }
+
   const secretRef: IntegrationSecretReference = activeCred
     ? {
         secretId: activeCred.id,
@@ -426,6 +461,7 @@ export async function processInboundWebhook(
         algorithm: activeCred.algorithm,
         fingerprint: activeCred.fingerprint,
         expiresAt: activeCred.expiresAt,
+        secretPayload,
       }
     : {
         secretId: "sec_placeholder",

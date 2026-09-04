@@ -10,6 +10,7 @@ import {
     PushProvider,
 } from "./provider.types";
 import { DatabaseInAppProviderAdapter } from "./databaseInAppProviderAdapter";
+import { BrevoEmailProviderAdapter } from "./brevoEmailProviderAdapter";
 import { ResendEmailProviderAdapter } from "./resendEmailProviderAdapter";
 import { MockEmailProviderAdapter } from "./mockEmailProviderAdapter";
 import {
@@ -25,8 +26,13 @@ let pushProviderInstance: PushProvider | null = null;
 export class NotificationProviderFactory {
     static getEmailProvider(): EmailProvider {
         if (!emailProviderInstance) {
+            const configured = process.env.EMAIL_PROVIDER?.trim().toUpperCase();
+            const hasBrevoKey = !!process.env.BREVO_API_KEY?.trim();
             const hasResendKey = !!process.env.RESEND_API_KEY?.trim();
-            if (hasResendKey) {
+
+            if (configured === "BREVO" || (hasBrevoKey && configured !== "RESEND")) {
+                emailProviderInstance = new BrevoEmailProviderAdapter();
+            } else if (configured === "RESEND" || hasResendKey) {
                 emailProviderInstance = new ResendEmailProviderAdapter();
             } else {
                 emailProviderInstance = new MockEmailProviderAdapter();

@@ -24,7 +24,7 @@ import type {
 } from "./providerTypes";
 
 export interface BillingProviderAdapter {
-  readonly providerName: "STRIPE" | "MOCK";
+  readonly providerName: "STRIPE" | "MOCK" | "PADDLE";
 
   // Customer Management
   createCustomer(params: CreateProviderCustomerParams): Promise<ProviderCustomerResult>;
@@ -74,3 +74,25 @@ export function translateStripeSubscriptionStatus(stripeStatus: string): Subscri
       throw new Error(`Unrecognized Stripe subscription status: '${stripeStatus}'`);
   }
 }
+
+/**
+ * Explicitly and exhaustively translates Paddle Billing subscription status strings to Aforden SubscriptionStatus enum.
+ * Throws on any unrecognized status without silent fallthrough.
+ */
+export function translatePaddleSubscriptionStatus(paddleStatus: string): SubscriptionStatus {
+  switch (paddleStatus) {
+    case "active":
+      return SubscriptionStatus.ACTIVE;
+    case "trialing":
+      return SubscriptionStatus.TRIALING;
+    case "past_due":
+      return SubscriptionStatus.PAST_DUE;
+    case "paused":
+      return SubscriptionStatus.PAUSED;
+    case "canceled":
+      return SubscriptionStatus.CANCELED;
+    default:
+      throw new Error(`Unrecognized Paddle subscription status: '${paddleStatus}'`);
+  }
+}
+

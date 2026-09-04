@@ -7,6 +7,7 @@ export * from "./adapterRegistry";
 export * from "./adapterResolution";
 export * from "./mockEmailAdapter";
 export * from "./resendAdapter";
+export * from "./brevoAdapter";
 export * from "./twilioAdapter";
 export * from "./oauth2Helper";
 export * from "./quickBooksAdapter";

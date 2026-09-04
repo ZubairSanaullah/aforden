@@ -26,6 +26,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const signature =
       request.headers.get("stripe-signature") ||
+      request.headers.get("paddle-signature") ||
       request.headers.get("x-signature") ||
       "";
 

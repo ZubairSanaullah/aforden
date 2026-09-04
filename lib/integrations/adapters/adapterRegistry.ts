@@ -11,6 +11,8 @@ import {
   AdapterCapabilityMismatchError,
 } from "../integrationErrors";
 import type { IntegrationAdapter, IntegrationCapability } from "./types";
+import { ResendAdapter } from "./resendAdapter";
+import { BrevoAdapter } from "./brevoAdapter";
 
 export interface RegisterAdapterOptions {
   /**
@@ -147,6 +149,14 @@ export class AdapterRegistry {
       }
     }
   }
+
+  /**
+   * Registers standard default platform adapters (Resend, Brevo).
+   */
+  public static registerDefaultAdapters(): void {
+    this.registerAdapter(new ResendAdapter(), { allowOverride: true });
+    this.registerAdapter(new BrevoAdapter(), { allowOverride: true });
+  }
 }
 
 // Module-level convenience function exports
@@ -158,3 +168,7 @@ export const getAllAdapters = AdapterRegistry.getAllAdapters.bind(AdapterRegistr
 export const unregisterAdapter = AdapterRegistry.unregisterAdapter.bind(AdapterRegistry);
 export const clearAdapters = AdapterRegistry.clearAdapters.bind(AdapterRegistry);
 export const validateAdapterCatalogConsistency = AdapterRegistry.validateAdapterCatalogConsistency.bind(AdapterRegistry);
+export const registerDefaultAdapters = AdapterRegistry.registerDefaultAdapters.bind(AdapterRegistry);
+
+// Initialize default built-in platform adapters on startup
+registerDefaultAdapters();

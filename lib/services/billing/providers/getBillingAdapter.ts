@@ -7,6 +7,7 @@ import { BillingProviderType } from "@/generated/prisma/enums";
 import type { BillingProviderAdapter } from "./billingProviderAdapter";
 import { StripeBillingAdapter } from "./stripeBillingAdapter";
 import { MockBillingAdapter } from "./mockBillingAdapter";
+import { PaddleBillingAdapter, type PaddleBillingAdapterOptions } from "./paddleBillingAdapter";
 
 /**
  * Returns the appropriate BillingProviderAdapter implementation based on the provider enum.
@@ -14,13 +15,16 @@ import { MockBillingAdapter } from "./mockBillingAdapter";
  */
 export function getBillingAdapter(
   provider: BillingProviderType | string,
-  options?: { apiKey?: string; webhookSecret?: string }
+  options?: { apiKey?: string; webhookSecret?: string; environment?: "sandbox" | "production" }
 ): BillingProviderAdapter {
   const normalized = typeof provider === "string" ? provider.trim().toUpperCase() : provider;
   switch (normalized) {
     case BillingProviderType.STRIPE:
     case "STRIPE":
       return new StripeBillingAdapter(options);
+    case BillingProviderType.PADDLE:
+    case "PADDLE":
+      return new PaddleBillingAdapter(options);
     case BillingProviderType.MOCK:
     case "MOCK":
       return new MockBillingAdapter();

@@ -5,7 +5,8 @@ export function getEmailFromAddress(): {
     email: string;
 } {
     const email =
-        process.env.EMAIL_FROM?.trim();
+        process.env.EMAIL_FROM?.trim() ||
+        process.env.EMAIL_FROM_ADDRESS?.trim();
 
     if (!email) {
         throw new Error(

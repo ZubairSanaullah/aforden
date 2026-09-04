@@ -16,6 +16,7 @@ export * from "./eventIngestionService";
 export * from "./outboxProcessorService";
 export * from "./providers/provider.types";
 export * from "./providers/databaseInAppProviderAdapter";
+export * from "./providers/brevoEmailProviderAdapter";
 export * from "./providers/resendEmailProviderAdapter";
 export * from "./providers/mockEmailProviderAdapter";
 export * from "./providers/unimplementedAdapters";

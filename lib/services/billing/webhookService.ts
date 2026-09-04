@@ -19,6 +19,7 @@ import {
 import type { BillingWebhookPayload } from "./providers/providerTypes";
 import { translateStripeSubscriptionStatus } from "./providers";
 import { transitionSubscriptionStatus } from "./subscriptionService";
+import { mapPaddleEventToDomainAction } from "./paddleWebhookMapper";
 
 import { NON_TERMINAL_SUBSCRIPTION_STATUSES } from "./subscriptionStateMachine";
 
@@ -172,6 +173,11 @@ async function handleEventDispatch(
 ): Promise<DispatchOutcome> {
   const db = prisma as PrismaClient;
   const eventTimestamp = extractEventTimestamp(event);
+
+  // Dedicated handler for Paddle Billing events
+  if (event.provider === BillingProviderType.PADDLE) {
+    return await handlePaddleEventDispatch(db, event, eventTimestamp);
+  }
 
   switch (event.eventType) {
     // -----------------------------------------------------------------------
@@ -613,6 +619,295 @@ async function handleCheckoutSessionCompleted(
 }
 
 // ---------------------------------------------------------------------------
+// Paddle Event Dispatcher & Handlers
+// ---------------------------------------------------------------------------
+
+async function handlePaddleEventDispatch(
+  db: PrismaClient,
+  event: BillingWebhookPayload,
+  eventTimestamp: Date
+): Promise<DispatchOutcome> {
+  const action = mapPaddleEventToDomainAction(event);
+
+  switch (action.type) {
+    case "IGNORED": {
+      return {
+        status: "IGNORED",
+        message: action.reason,
+      };
+    }
+
+    case "SUBSCRIPTION_SYNC": {
+      const subscription = await resolveSubscription(
+        db,
+        action.providerSubscriptionId,
+        action.providerCustomerId
+      );
+
+      if (!subscription) {
+        return {
+          status: "IGNORED",
+          message: `No matching subscription found for Paddle sub '${action.providerSubscriptionId}'`,
+        };
+      }
+
+      await db.$transaction(async (tx) => {
+        if (subscription.status !== action.status) {
+          // Resolve authorized domain trigger source based on target transition
+          let triggerSource = "WEBHOOK:customer.subscription.updated";
+          if (action.status === SubscriptionStatus.ACTIVE) {
+            triggerSource =
+              subscription.status === SubscriptionStatus.TRIALING
+                ? "WEBHOOK"
+                : "WEBHOOK:invoice.payment_succeeded";
+          } else if (action.status === SubscriptionStatus.PAST_DUE) {
+            triggerSource = "WEBHOOK:invoice.payment_failed";
+          } else if (action.status === SubscriptionStatus.CANCELED) {
+            triggerSource =
+              subscription.status === SubscriptionStatus.PAST_DUE ||
+              subscription.status === SubscriptionStatus.UNPAID
+                ? "WEBHOOK:customer.subscription.deleted"
+                : "WEBHOOK";
+          }
+
+          await transitionSubscriptionStatus(tx, {
+            subscriptionId: subscription.id,
+            toStatus: action.status,
+            triggerSource,
+            providerEventTimestamp: eventTimestamp,
+            currentPeriodStart: action.currentPeriodStart,
+            currentPeriodEnd: action.currentPeriodEnd,
+            cancelAtPeriodEnd: action.cancelAtPeriodEnd,
+            seatsCount: action.seatsCount,
+          });
+        } else {
+          // Same status: update period and flags if event is newer
+          if (
+            !subscription.lastSyncedProviderEventAt ||
+            eventTimestamp.getTime() >= subscription.lastSyncedProviderEventAt.getTime()
+          ) {
+            await tx.subscription.update({
+              where: { id: subscription.id },
+              data: {
+                currentPeriodStart: action.currentPeriodStart,
+                currentPeriodEnd: action.currentPeriodEnd,
+                cancelAtPeriodEnd: action.cancelAtPeriodEnd,
+                seatsCount: action.seatsCount,
+                lastSyncedProviderEventAt: eventTimestamp,
+              },
+            });
+          }
+        }
+      });
+
+      return {
+        status: "PROCESSED",
+        message: `Subscription '${subscription.id}' synced to status '${action.status}' via ${event.eventType}`,
+      };
+    }
+
+    case "SUBSCRIPTION_CANCELED": {
+      const subscription = await resolveSubscription(
+        db,
+        action.providerSubscriptionId,
+        action.providerCustomerId
+      );
+
+      if (!subscription) {
+        return {
+          status: "IGNORED",
+          message: `No matching subscription found for Paddle canceled event '${action.providerSubscriptionId}'`,
+        };
+      }
+
+      if (subscription.status !== SubscriptionStatus.CANCELED) {
+        const triggerSource =
+          subscription.status === SubscriptionStatus.PAST_DUE ||
+          subscription.status === SubscriptionStatus.UNPAID
+            ? "WEBHOOK:customer.subscription.deleted"
+            : "WEBHOOK";
+
+        await db.$transaction(async (tx) => {
+          await transitionSubscriptionStatus(tx, {
+            subscriptionId: subscription.id,
+            toStatus: SubscriptionStatus.CANCELED,
+            triggerSource,
+            providerEventTimestamp: eventTimestamp,
+          });
+        });
+      }
+
+      return {
+        status: "PROCESSED",
+        message: `Subscription '${subscription.id}' transitioned to CANCELED via Paddle webhook`,
+      };
+    }
+
+    case "PAYMENT_SUCCEEDED": {
+      const subscription = await resolveSubscription(
+        db,
+        action.providerSubscriptionId,
+        action.providerCustomerId
+      );
+
+      if (!subscription) {
+        return {
+          status: "IGNORED",
+          message: `No matching subscription found for Paddle transaction '${action.providerInvoiceId}'`,
+        };
+      }
+
+      // 1. Transition subscription to ACTIVE if PAST_DUE or INCOMPLETE
+      if (
+        subscription.status === SubscriptionStatus.PAST_DUE ||
+        subscription.status === SubscriptionStatus.INCOMPLETE ||
+        subscription.status === SubscriptionStatus.UNPAID
+      ) {
+        await db.$transaction(async (tx) => {
+          await transitionSubscriptionStatus(tx, {
+            subscriptionId: subscription.id,
+            toStatus: SubscriptionStatus.ACTIVE,
+            triggerSource: "WEBHOOK:invoice.payment_succeeded",
+            providerEventTimestamp: eventTimestamp,
+          });
+        });
+      } else {
+        if (
+          !subscription.lastSyncedProviderEventAt ||
+          eventTimestamp.getTime() > subscription.lastSyncedProviderEventAt.getTime()
+        ) {
+          await db.subscription.update({
+            where: { id: subscription.id },
+            data: { lastSyncedProviderEventAt: eventTimestamp },
+          });
+        }
+      }
+
+      // 2. Upsert SubscriptionInvoice and SubscriptionPayment
+      const invoice = await db.subscriptionInvoice.upsert({
+        where: { providerInvoiceId: action.providerInvoiceId },
+        create: {
+          workspaceId: subscription.workspaceId,
+          accountId: subscription.accountId,
+          subscriptionId: subscription.id,
+          providerInvoiceId: action.providerInvoiceId,
+          status: SubscriptionInvoiceStatus.PAID,
+          currency: action.currency,
+          amountDueCents: action.amountDueCents,
+          amountPaidCents: action.amountPaidCents,
+          subtotalCents: action.subtotalCents,
+          taxCents: action.taxCents,
+          hostedInvoiceUrl: action.hostedInvoiceUrl,
+          invoicePdfUrl: action.invoicePdfUrl,
+          periodStart: action.periodStart || subscription.currentPeriodStart,
+          periodEnd: action.periodEnd || subscription.currentPeriodEnd,
+          paidAt: action.paidAt,
+        },
+        update: {
+          status: SubscriptionInvoiceStatus.PAID,
+          amountPaidCents: action.amountPaidCents,
+          hostedInvoiceUrl: action.hostedInvoiceUrl,
+          paidAt: action.paidAt,
+        },
+      });
+
+      await db.subscriptionPayment.upsert({
+        where: { providerPaymentId: action.providerPaymentId },
+        create: {
+          workspaceId: subscription.workspaceId,
+          invoiceId: invoice.id,
+          providerPaymentId: action.providerPaymentId,
+          amountCents: action.amountPaidCents,
+          currency: action.currency,
+          status: SubscriptionPaymentStatus.SUCCEEDED,
+          paidAt: action.paidAt,
+        },
+        update: {
+          status: SubscriptionPaymentStatus.SUCCEEDED,
+          paidAt: action.paidAt,
+        },
+      });
+
+      return {
+        status: "PROCESSED",
+        message: `Payment succeeded processed for Paddle subscription '${subscription.id}'`,
+      };
+    }
+
+    case "PAYMENT_FAILED": {
+      const subscription = await resolveSubscription(
+        db,
+        action.providerSubscriptionId,
+        action.providerCustomerId
+      );
+
+      if (!subscription) {
+        return {
+          status: "IGNORED",
+          message: `No matching subscription found for failed Paddle transaction '${action.providerInvoiceId}'`,
+        };
+      }
+
+      // 1. Transition subscription to PAST_DUE if currently ACTIVE
+      if (subscription.status === SubscriptionStatus.ACTIVE) {
+        await db.$transaction(async (tx) => {
+          await transitionSubscriptionStatus(tx, {
+            subscriptionId: subscription.id,
+            toStatus: SubscriptionStatus.PAST_DUE,
+            triggerSource: "WEBHOOK:invoice.payment_failed",
+            providerEventTimestamp: eventTimestamp,
+          });
+        });
+      }
+
+      // 2. Upsert SubscriptionInvoice and SubscriptionPayment records
+      const invoice = await db.subscriptionInvoice.upsert({
+        where: { providerInvoiceId: action.providerInvoiceId },
+        create: {
+          workspaceId: subscription.workspaceId,
+          accountId: subscription.accountId,
+          subscriptionId: subscription.id,
+          providerInvoiceId: action.providerInvoiceId,
+          status: SubscriptionInvoiceStatus.OPEN,
+          currency: action.currency,
+          amountDueCents: action.amountDueCents,
+          amountPaidCents: 0,
+          subtotalCents: action.subtotalCents,
+          taxCents: action.taxCents,
+          periodStart: action.periodStart || subscription.currentPeriodStart,
+          periodEnd: action.periodEnd || subscription.currentPeriodEnd,
+        },
+        update: {
+          status: SubscriptionInvoiceStatus.OPEN,
+        },
+      });
+
+      await db.subscriptionPayment.upsert({
+        where: { providerPaymentId: action.providerPaymentId },
+        create: {
+          workspaceId: subscription.workspaceId,
+          invoiceId: invoice.id,
+          providerPaymentId: action.providerPaymentId,
+          amountCents: action.amountDueCents,
+          currency: action.currency,
+          status: SubscriptionPaymentStatus.FAILED,
+          failureReason: action.failureReason,
+        },
+        update: {
+          status: SubscriptionPaymentStatus.FAILED,
+          failureReason: action.failureReason,
+        },
+      });
+
+      return {
+        status: "PROCESSED",
+        message: `Payment failure processed for Paddle subscription '${subscription.id}'`,
+      };
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -621,6 +916,8 @@ function extractSubscriptionId(data: Record<string, unknown>): string | null {
   if (data.subscription && typeof (data.subscription as any).id === "string") {
     return (data.subscription as any).id;
   }
+  if (typeof data.subscriptionId === "string") return data.subscriptionId;
+  if (typeof data.subscription_id === "string") return data.subscription_id;
   return null;
 }
 
@@ -629,15 +926,33 @@ function extractCustomerId(data: Record<string, unknown>): string | null {
   if (data.customer && typeof (data.customer as any).id === "string") {
     return (data.customer as any).id;
   }
+  if (typeof data.customerId === "string") return data.customerId;
+  if (typeof data.customer_id === "string") return data.customer_id;
   return null;
 }
 
 function extractEventTimestamp(event: BillingWebhookPayload): Date {
+  // Stripe UNIX timestamp (seconds)
   if (event.rawEvent && typeof (event.rawEvent as any).created === "number") {
     return new Date((event.rawEvent as any).created * 1000);
   }
   if (typeof (event.data as any)?.created === "number") {
     return new Date((event.data as any).created * 1000);
+  }
+  // Paddle ISO 8601 string or Date (occurredAt / occurred_at / createdAt)
+  const rawOccurred = (event.rawEvent as any)?.occurredAt || (event.rawEvent as any)?.occurred_at;
+  if (rawOccurred) {
+    const d = new Date(rawOccurred);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const dataOccurred =
+    (event.data as any)?.occurred_at ||
+    (event.data as any)?.occurredAt ||
+    (event.data as any)?.updated_at ||
+    (event.data as any)?.created_at;
+  if (dataOccurred) {
+    const d = new Date(dataOccurred);
+    if (!isNaN(d.getTime())) return d;
   }
   return new Date();
 }

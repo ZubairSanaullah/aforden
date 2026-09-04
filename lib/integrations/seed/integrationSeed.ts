@@ -44,6 +44,27 @@ export const SEED_INTEGRATIONS: readonly SeedIntegrationData[] = [
     },
   },
   {
+    id: "brevo",
+    name: "Brevo",
+    description: "Transactional email delivery platform with native REST API dispatch.",
+    logoUrl: "/integrations/brevo.svg",
+    status: IntegrationStatus.ACTIVE,
+    capabilities: [
+      IntegrationCapability.EMAIL_SEND,
+      IntegrationCapability.WEBHOOK_RECEIVE,
+    ],
+    authType: "API_KEY",
+    configSchemaJson: {
+      type: "object",
+      properties: {
+        fromEmail: { type: "string", format: "email" },
+        fromName: { type: "string" },
+        replyTo: { type: "string", format: "email" },
+      },
+      required: ["fromEmail"],
+    },
+  },
+  {
     id: "twilio",
     name: "Twilio",
     description: "Cloud communications platform for outbound SMS notifications and messaging.",

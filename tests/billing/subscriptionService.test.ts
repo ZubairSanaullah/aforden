@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "../../generated/prisma/client";
 import { SubscriptionStatus } from "../../generated/prisma/enums";
@@ -164,6 +164,48 @@ describe("Phase 1.15.4 — SubscriptionService Lifecycle Engine Tests", () => {
         expect(err.code).toBe("DUPLICATE_ACTIVE_SUBSCRIPTION");
         expect(err.context.existingSubscriptionId).toBe(activeSubId);
       }
+    });
+
+    it("should catch P2002 and throw DuplicateActiveSubscriptionError with warning when conflicting lookup fails due to aborted transaction state", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const mockTx: any = {
+        subscription: {
+          findFirst: async (args: any) => {
+            if (args?.select?.id) {
+              // Simulate PostgreSQL aborted transaction state error
+              throw new Error("current transaction is aborted, commands ignored until end of transaction block");
+            }
+            return null;
+          },
+          create: async () => {
+            throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+              code: "P2002",
+              clientVersion: "7.0.0",
+            });
+          },
+        },
+      };
+
+      try {
+        await createSubscription(mockTx, {
+          workspaceId: wsId,
+          accountId,
+          planId,
+          status: SubscriptionStatus.ACTIVE,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400000),
+        });
+        expect.unreachable("Should have thrown DuplicateActiveSubscriptionError");
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(DuplicateActiveSubscriptionError);
+        expect(err.code).toBe("DUPLICATE_ACTIVE_SUBSCRIPTION");
+        expect(err.context.existingSubscriptionId).toBeUndefined();
+      }
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("current transaction is aborted")
+      );
+      warnSpy.mockRestore();
     });
 
     it("should allow a new subscription when existing subscription is in terminal status (CANCELED)", async () => {

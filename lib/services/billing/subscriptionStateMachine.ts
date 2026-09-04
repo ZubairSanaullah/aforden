@@ -41,6 +41,15 @@ export const SUBSCRIPTION_TRANSITIONS: readonly TransitionRule[] = [
   },
   {
     from: SubscriptionStatus.INCOMPLETE,
+    to: SubscriptionStatus.TRIALING,
+    permittedTriggers: [
+      "WEBHOOK:customer.subscription.updated",
+      "WEBHOOK",
+    ],
+    description: "Provider gateway activates subscription trial period.",
+  },
+  {
+    from: SubscriptionStatus.INCOMPLETE,
     to: SubscriptionStatus.INCOMPLETE_EXPIRED,
     permittedTriggers: [
       "WEBHOOK:customer.subscription.updated[incomplete_expired]",
@@ -87,8 +96,12 @@ export const SUBSCRIPTION_TRANSITIONS: readonly TransitionRule[] = [
   {
     from: SubscriptionStatus.ACTIVE,
     to: SubscriptionStatus.PAUSED,
-    permittedTriggers: ["ADMIN_OVERRIDE"],
-    description: "Administrative courtesy or billing dispute pause.",
+    permittedTriggers: [
+      "ADMIN_OVERRIDE",
+      "WEBHOOK:customer.subscription.updated",
+      "WEBHOOK",
+    ],
+    description: "Administrative courtesy, billing dispute, or gateway pause.",
   },
   {
     from: SubscriptionStatus.PAST_DUE,
@@ -135,8 +148,13 @@ export const SUBSCRIPTION_TRANSITIONS: readonly TransitionRule[] = [
   {
     from: SubscriptionStatus.PAUSED,
     to: SubscriptionStatus.ACTIVE,
-    permittedTriggers: ["USER_ACTION:resume", "ADMIN_OVERRIDE"],
-    description: "User or administrator resumes paused subscription.",
+    permittedTriggers: [
+      "USER_ACTION:resume",
+      "ADMIN_OVERRIDE",
+      "WEBHOOK:customer.subscription.updated",
+      "WEBHOOK",
+    ],
+    description: "User or administrator resumes paused subscription, or provider gateway resumes.",
   },
   {
     from: SubscriptionStatus.CANCELED,

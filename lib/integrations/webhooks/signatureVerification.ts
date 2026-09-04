@@ -6,6 +6,7 @@
 
 import crypto from "crypto";
 import type { IntegrationCredential } from "@/generated/prisma/client";
+import { timingSafeEqualStrings } from "@/lib/services/platform/security/constantTime";
 import { IntegrationCredentialStatus, CREDENTIAL_SUPERSEDED_GRACE_PERIOD_MS } from "../credentialStateMachine";
 
 export interface SignatureVerificationResult {
@@ -37,6 +38,9 @@ export function extractSignatureAndTimestamp(headers: Headers): {
     "stripe-signature",
     "x-twilio-signature",
     "webhook-signature",
+    "x-aforden-webhook-secret",
+    "x-webhook-secret",
+    "x-brevo-webhook-secret",
   ];
 
   let rawHeaderValue: string | null = null;
@@ -172,7 +176,7 @@ export async function verifyWebhookSignature(
   // 1. Try ACTIVE credentials first
   for (const cred of activeCredentials) {
     const secret = await resolveCredentialSecret(cred, customSecretResolver);
-    if (isValidHmac(rawBody, signature, secret, timestamp)) {
+    if (matchesSecret(rawBody, signature, secret, timestamp)) {
       return {
         valid: true,
         matchedCredential: cred,
@@ -187,7 +191,7 @@ export async function verifyWebhookSignature(
     const ageMs = nowMs - cred.updatedAt.getTime();
     if (ageMs <= gracePeriodMs) {
       const secret = await resolveCredentialSecret(cred, customSecretResolver);
-      if (isValidHmac(rawBody, signature, secret, timestamp)) {
+      if (matchesSecret(rawBody, signature, secret, timestamp)) {
         return {
           valid: true,
           matchedCredential: cred,
@@ -202,6 +206,52 @@ export async function verifyWebhookSignature(
     reason: "Cryptographic signature mismatch against active and eligible superseded credentials",
     extractedTimestamp: timestamp,
   };
+}
+
+/**
+ * Validates a signature against secret material using either HMAC-SHA256 or constant-time token comparison.
+ * Supports structured JSON secret payloads containing webhookSecret or signingSecret.
+ */
+function matchesSecret(
+  rawBody: Buffer,
+  signature: string,
+  secret: string,
+  timestamp?: number
+): boolean {
+  // 1. Direct HMAC verification
+  if (isValidHmac(rawBody, signature, secret, timestamp)) {
+    return true;
+  }
+
+  // 2. Direct constant-time secret equality (for providers like Brevo using custom secret headers)
+  if (timingSafeEqualStrings(signature, secret)) {
+    return true;
+  }
+
+  // 3. Structured JSON secret payload parsing (e.g. { apiKey, webhookSecret })
+  if (typeof secret === "string" && secret.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(secret.trim());
+      const candidateSecrets = [
+        parsed.webhookSecret,
+        parsed.signingSecret,
+        parsed.apiKey,
+      ].filter((s): s is string => typeof s === "string" && s.length > 0);
+
+      for (const cand of candidateSecrets) {
+        if (
+          isValidHmac(rawBody, signature, cand, timestamp) ||
+          timingSafeEqualStrings(signature, cand)
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore JSON parse error and proceed
+    }
+  }
+
+  return false;
 }
 
 /**

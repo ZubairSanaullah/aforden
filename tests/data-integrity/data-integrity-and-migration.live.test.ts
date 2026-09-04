@@ -158,18 +158,18 @@ describe("Phase 1.21.8 — Data Integrity & Migration Testing (Empty-DB Migratio
     // 1. Clean Migration from Empty Database
     // =========================================================================
     describe("1. Clean Migration from Empty Database (Schema Provisioning & DDL Verification)", () => {
-        it("(a) applies full 39-migration history sequentially from zero on an empty schema without errors", async () => {
+        it("(a) applies full 40-migration history sequentially from zero on an empty schema without errors", async () => {
             // 1. Create fresh isolated PostgreSQL schema
             await pgClient.query(`CREATE SCHEMA "${isolatedSchemaName}";`);
 
-            // 2. Discover all 39 migration files in chronological order
+            // 2. Discover all 40 migration files in chronological order
             const migBaseDir = path.join(process.cwd(), "prisma", "migrations");
             const migrationDirs = fs
                 .readdirSync(migBaseDir)
                 .filter((f) => fs.statSync(path.join(migBaseDir, f)).isDirectory())
                 .sort();
 
-            expect(migrationDirs.length).toBe(39);
+            expect(migrationDirs.length).toBe(40);
 
             // 3. Execute all migrations sequentially in the isolated schema
             for (const dirName of migrationDirs) {
@@ -277,13 +277,15 @@ describe("Phase 1.21.8 — Data Integrity & Migration Testing (Empty-DB Migratio
 
             // 2. Seed integration catalog
             const catalogResult = await seedIntegrationCatalog(prisma);
-            expect(catalogResult.seededCount).toBe(5);
+            expect(catalogResult.seededCount).toBe(6);
 
             // Verify standard catalog integrations exist in database
             const integrations = await prisma.integration.findMany({
-                where: { id: { in: ["resend", "twilio", "quickbooks_online", "google_calendar", "aws_s3"] } },
+                where: { id: { in: ["resend", "brevo", "twilio", "quickbooks_online", "google_calendar", "aws_s3"] } },
             });
-            expect(integrations.length).toBe(5);
+            expect(integrations.length).toBe(6);
+            const seededIds = integrations.map((i) => i.id);
+            expect(seededIds).toContain("brevo");
         });
 
         it("(b) re-running all seed scripts produces zero duplicate rows and zero unique constraint errors (idempotency)", async () => {
@@ -298,12 +300,18 @@ describe("Phase 1.21.8 — Data Integrity & Migration Testing (Empty-DB Migratio
 
             // 2nd execution of integration catalog seed
             const catalogResult2 = await seedIntegrationCatalog(prisma);
-            expect(catalogResult2.seededCount).toBe(5);
+            expect(catalogResult2.seededCount).toBe(6);
 
             const totalIntegrations = await prisma.integration.count({
-                where: { id: { in: ["resend", "twilio", "quickbooks_online", "google_calendar", "aws_s3"] } },
+                where: { id: { in: ["resend", "brevo", "twilio", "quickbooks_online", "google_calendar", "aws_s3"] } },
             });
-            expect(totalIntegrations).toBe(5); // Zero duplicate rows
+            expect(totalIntegrations).toBe(6); // Zero duplicate rows
+
+            const brevoIntegration = await prisma.integration.findUnique({
+                where: { id: "brevo" },
+            });
+            expect(brevoIntegration).toBeDefined();
+            expect(brevoIntegration?.id).toBe("brevo");
         });
     });
 

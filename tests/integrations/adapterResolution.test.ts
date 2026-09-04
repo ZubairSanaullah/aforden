@@ -14,6 +14,7 @@ import {
 } from "@/lib/integrations/adapters/adapterRegistry";
 import { getAdapterForConnection } from "@/lib/integrations/adapters/adapterResolution";
 import { MockEmailAdapter } from "@/lib/integrations/adapters/mockEmailAdapter";
+import { BrevoAdapter } from "@/lib/integrations/adapters/brevoAdapter";
 import { seedIntegrationCatalog } from "@/lib/integrations/seed/integrationSeed";
 import {
   ConnectionNotFoundError,
@@ -87,6 +88,35 @@ describe("Phase 1.17.3 — Capability-to-Adapter Resolution Bridge", () => {
     expect(resolved).toBeDefined();
     expect(resolved.adapter).toBe(resendAdapter);
     expect(resolved.adapter.integrationId).toBe("resend");
+    expect(resolved.connection.id).toBe(connection.id);
+    expect(resolved.connection.workspaceId).toBe(testWorkspaceId);
+    expect(resolved.connection.status).toBe(IntegrationConnectionStatus.CONNECTED);
+    expect(resolved.connection.connectionKey).toBe("default");
+  });
+
+  it("should resolve BrevoAdapter for a 'brevo' connection through the same lookup path", async () => {
+    // 1. Register BrevoAdapter for 'brevo'
+    const brevoAdapter = new BrevoAdapter();
+    registerAdapter(brevoAdapter);
+
+    // 2. Create IntegrationConnection in database for 'brevo'
+    const connection = await prisma.integrationConnection.create({
+      data: {
+        workspaceId: testWorkspaceId,
+        integrationId: "brevo",
+        connectionKey: "default",
+        status: IntegrationConnectionStatus.CONNECTED,
+        configJson: { fromEmail: "billing@aforden.com" },
+      },
+    });
+
+    // 3. Resolve adapter for connection
+    const resolved = await getAdapterForConnection(connection.id, prisma);
+
+    expect(resolved).toBeDefined();
+    expect(resolved.adapter).toBe(brevoAdapter);
+    expect(resolved.adapter.integrationId).toBe("brevo");
+    expect(resolved.adapter.displayName).toBe("Brevo");
     expect(resolved.connection.id).toBe(connection.id);
     expect(resolved.connection.workspaceId).toBe(testWorkspaceId);
     expect(resolved.connection.status).toBe(IntegrationConnectionStatus.CONNECTED);

@@ -1,11 +1,14 @@
 import { Resend } from "resend";
 
 import { getEmailFromAddress } from "./config";
+import { BrevoEmailProvider } from "./brevoProvider";
 import type {
     EmailProvider,
     EmailSendResult,
     SendEmailInput,
 } from "./types";
+
+export { BrevoEmailProvider };
 
 function getResendClient(): Resend {
     const apiKey =
@@ -36,8 +39,9 @@ function normalizeRecipients(
     });
 }
 
-class ResendEmailProvider
+export class ResendEmailProvider
     implements EmailProvider {
+    public readonly name = "Resend";
     async send(
         input: SendEmailInput
     ): Promise<EmailSendResult> {
@@ -77,14 +81,35 @@ class ResendEmailProvider
     }
 }
 
-let provider: EmailProvider | null =
-    null;
+let provider: EmailProvider | null = null;
 
 export function getEmailProvider(): EmailProvider {
     if (!provider) {
-        provider =
-            new ResendEmailProvider();
+        const configuredProvider = process.env.EMAIL_PROVIDER?.trim().toUpperCase();
+
+        if (configuredProvider === "RESEND") {
+            provider = new ResendEmailProvider();
+        } else if (configuredProvider === "BREVO") {
+            provider = new BrevoEmailProvider();
+        } else if (process.env.BREVO_API_KEY?.trim()) {
+            // Default to Brevo if BREVO_API_KEY is configured
+            provider = new BrevoEmailProvider();
+        } else if (process.env.RESEND_API_KEY?.trim()) {
+            // Backward compatibility fallback to Resend if RESEND_API_KEY is present
+            provider = new ResendEmailProvider();
+        } else {
+            // Default to Brevo
+            provider = new BrevoEmailProvider();
+        }
     }
 
     return provider;
+}
+
+export function setEmailProvider(customProvider: EmailProvider | null): void {
+    provider = customProvider;
+}
+
+export function resetEmailProvider(): void {
+    provider = null;
 }
