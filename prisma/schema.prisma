@@ -985,6 +985,7 @@ model Customer {
   @@index([status])
   @@index([name])
   @@index([workspaceId, status])
+  @@index([workspaceId, name])
 }
 
 model CustomerContact {

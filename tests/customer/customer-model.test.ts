@@ -495,4 +495,45 @@ describe("Phase 1.4.2 — Customer Prisma Model & Schema Integration", () => {
             expect(deletedWorkspace.id).toBe("ws_cuid_456");
         });
     });
+
+    describe("Customer composite indexing regression (Finding A)", () => {
+        it("declares composite index @@index([workspaceId, name]) on Customer model to prevent unindexed cross-tenant name scans", async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+
+            const schemaPath = path.join(process.cwd(), "prisma", "schema.prisma");
+            const schemaContent = await fs.readFile(schemaPath, "utf-8");
+
+            const customerModelMatch = schemaContent.match(/model Customer \{([\s\S]*?)\n\}/);
+            expect(customerModelMatch, "Customer model definition should exist in schema.prisma").not.toBeNull();
+
+            const customerBody = customerModelMatch![1];
+            expect(
+                customerBody,
+                "Customer model must have @@index([workspaceId, name]) to ensure tenant-scoped queries with ORDER BY name ASC use the composite index rather than scanning Customer_name_idx globally"
+            ).toMatch(/@@index\(\s*\[\s*workspaceId\s*,\s*name\s*\]\s*\)/);
+        });
+
+        it("contains the migration file that creates Customer_workspaceId_name_idx", async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+
+            const migDir = path.join(process.cwd(), "prisma", "migrations");
+            const migrationFolders = (await fs.readdir(migDir)).filter((f) =>
+                f.includes("add_customer_workspace_name_index")
+            );
+            expect(
+                migrationFolders.length,
+                "Migration directory for customer workspace name index must exist"
+            ).toBeGreaterThan(0);
+
+            const sqlContent = await fs.readFile(
+                path.join(migDir, migrationFolders[0], "migration.sql"),
+                "utf-8"
+            );
+            expect(sqlContent).toContain(
+                'CREATE INDEX "Customer_workspaceId_name_idx" ON "Customer"("workspaceId", "name")'
+            );
+        });
+    });
 });

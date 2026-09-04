@@ -158,18 +158,18 @@ describe("Phase 1.21.8 — Data Integrity & Migration Testing (Empty-DB Migratio
     // 1. Clean Migration from Empty Database
     // =========================================================================
     describe("1. Clean Migration from Empty Database (Schema Provisioning & DDL Verification)", () => {
-        it("(a) applies full 38-migration history sequentially from zero on an empty schema without errors", async () => {
+        it("(a) applies full 39-migration history sequentially from zero on an empty schema without errors", async () => {
             // 1. Create fresh isolated PostgreSQL schema
             await pgClient.query(`CREATE SCHEMA "${isolatedSchemaName}";`);
 
-            // 2. Discover all 38 migration files in chronological order
+            // 2. Discover all 39 migration files in chronological order
             const migBaseDir = path.join(process.cwd(), "prisma", "migrations");
             const migrationDirs = fs
                 .readdirSync(migBaseDir)
                 .filter((f) => fs.statSync(path.join(migBaseDir, f)).isDirectory())
                 .sort();
 
-            expect(migrationDirs.length).toBe(38);
+            expect(migrationDirs.length).toBe(39);
 
             // 3. Execute all migrations sequentially in the isolated schema
             for (const dirName of migrationDirs) {
@@ -192,13 +192,19 @@ describe("Phase 1.21.8 — Data Integrity & Migration Testing (Empty-DB Migratio
         it("(b) spot-checks representative tables, columns, indexes, and constraints across all development phases", async () => {
             await pgClient.query(`SET search_path = "${isolatedSchemaName}", public;`);
 
-            // Phase 1.6: Customer Domain
+            // Phase 1.6: Customer Domain (columns & composite index)
             const customerCols = await pgClient.query<{ column_name: string }>(
                 `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'Customer';`,
                 [isolatedSchemaName]
             );
             const customerColNames = customerCols.rows.map((r) => r.column_name);
             expect(customerColNames).toEqual(expect.arrayContaining(["id", "workspaceId", "name", "status", "createdAt"]));
+
+            const customerIdxRes = await pgClient.query<{ indexname: string }>(
+                `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = 'Customer' AND indexname = 'Customer_workspaceId_name_idx';`,
+                [isolatedSchemaName]
+            );
+            expect(customerIdxRes.rows.length).toBe(1);
 
             // Phase 1.8: Work Order Domain
             const woCols = await pgClient.query<{ column_name: string }>(
