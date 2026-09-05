@@ -78,6 +78,7 @@ export class BrevoEmailProviderAdapter implements EmailProvider {
                     "api-key": this.apiKey,
                 },
                 body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(10000),
             });
 
             if (!response.ok) {

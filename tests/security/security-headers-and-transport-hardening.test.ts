@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Auth } from "@auth/core";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
-import { middleware } from "@/middleware";
+import { middleware, proxy } from "@/proxy";
 import {
   SECURITY_HEADERS,
   PUBLIC_API_CORS_HEADERS,

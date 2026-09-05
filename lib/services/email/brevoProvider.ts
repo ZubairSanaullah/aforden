@@ -101,6 +101,7 @@ export class BrevoEmailProvider implements EmailProvider {
                     "api-key": apiKey,
                 },
                 body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(10000),
             });
         } catch (fetchErr: unknown) {
             const message = fetchErr instanceof Error ? fetchErr.message : "Network error contacting Brevo API.";
@@ -114,7 +115,7 @@ export class BrevoEmailProvider implements EmailProvider {
                 `Brevo API error with HTTP ${response.status}`;
             const rawCode = typeof errorBody.code === "string" ? errorBody.code : undefined;
 
-            console.error("Brevo email delivery error:", errorBody);
+            console.error(`Brevo email delivery error [${rawCode || response.status}]: ${rawMessage}`);
 
             const isRetryable = response.status === 429 || response.status >= 500;
             throw new BrevoDeliveryError(rawMessage, response.status, isRetryable, rawCode);

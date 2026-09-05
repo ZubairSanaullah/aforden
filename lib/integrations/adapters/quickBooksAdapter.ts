@@ -149,8 +149,9 @@ export class QuickBooksAdapter implements IntegrationAdapter {
 
     // Health check ping against CompanyInfo endpoint
     try {
+      const baseUrl = this.getBaseApiUrl(config);
       const response = await fetch(
-        `https://quickbooks.api.intuit.com/v3/company/${realmId}/companyinfo/${realmId}`,
+        `${baseUrl}/v3/company/${realmId}/companyinfo/${realmId}`,
         {
           method: "GET",
           headers: {
@@ -255,8 +256,9 @@ export class QuickBooksAdapter implements IntegrationAdapter {
     }
 
     try {
+      const baseUrl = this.getBaseApiUrl(config);
       const response = await fetch(
-        `https://quickbooks.api.intuit.com/v3/company/${realmId}/companyinfo/${realmId}`,
+        `${baseUrl}/v3/company/${realmId}/companyinfo/${realmId}`,
         {
           method: "GET",
           headers: {
@@ -485,8 +487,9 @@ export class QuickBooksAdapter implements IntegrationAdapter {
     };
 
     try {
+      const baseUrl = this.getBaseApiUrl(request.connectionConfig);
       const response = await fetch(
-        `https://quickbooks.api.intuit.com/v3/company/${realmId}/invoice`,
+        `${baseUrl}/v3/company/${realmId}/invoice`,
         {
           method: "POST",
           headers: {
@@ -588,8 +591,9 @@ export class QuickBooksAdapter implements IntegrationAdapter {
     };
 
     try {
+      const baseUrl = this.getBaseApiUrl(request.connectionConfig);
       const response = await fetch(
-        `https://quickbooks.api.intuit.com/v3/company/${realmId}/customer`,
+        `${baseUrl}/v3/company/${realmId}/customer`,
         {
           method: "POST",
           headers: {
@@ -682,8 +686,9 @@ export class QuickBooksAdapter implements IntegrationAdapter {
     };
 
     try {
+      const baseUrl = this.getBaseApiUrl(request.connectionConfig);
       const response = await fetch(
-        `https://quickbooks.api.intuit.com/v3/company/${realmId}/payment`,
+        `${baseUrl}/v3/company/${realmId}/payment`,
         {
           method: "POST",
           headers: {
@@ -747,6 +752,14 @@ export class QuickBooksAdapter implements IntegrationAdapter {
   // =========================================================================
   // Private Helper & Token Resolution Methods
   // =========================================================================
+
+  private getBaseApiUrl(config?: Record<string, unknown>): string {
+    const env = (config?.environment as string) || process.env.QUICKBOOKS_ENVIRONMENT;
+    const isSandbox = env === "sandbox" || config?.useSandbox === true;
+    return isSandbox
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  }
 
   private extractTokensFromAuthPayload(authPayload: unknown): OAuth2TokenPayload {
     if (typeof authPayload === "string") {

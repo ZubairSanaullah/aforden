@@ -30,7 +30,7 @@ import {
 } from "@/lib/publicApi/envelope";
 import { handleApiVersionDispatch } from "@/lib/publicApi/dispatch";
 import { withPublicApiContext } from "@/lib/publicApi/handler";
-import { middleware } from "@/middleware";
+import { middleware, proxy } from "@/proxy";
 
 describe("Phase 1.18.2 / 1.18.3 — Public API Versioning Foundation & Envelopes", () => {
     describe("1. Version Constants & Strict Path Parsing", () => {
@@ -158,7 +158,7 @@ describe("Phase 1.18.2 / 1.18.3 — Public API Versioning Foundation & Envelopes
     });
 
     describe("3. Edge Runtime Import Safety Audit", () => {
-        it("should ensure middleware.ts and its direct import graph contain zero Node-only built-in modules", () => {
+        it("should ensure proxy.ts and its direct import graph contain zero Node-only built-in modules", () => {
             const forbiddenNodeModules = [
                 "node:crypto",
                 "node:async_hooks",
@@ -178,7 +178,7 @@ describe("Phase 1.18.2 / 1.18.3 — Public API Versioning Foundation & Envelopes
             ];
 
             const filesToCheck = [
-                path.resolve(process.cwd(), "middleware.ts"),
+                path.resolve(process.cwd(), "proxy.ts"),
                 path.resolve(process.cwd(), "lib/publicApi/versions.ts"),
                 path.resolve(process.cwd(), "lib/publicApi/requestId.ts"),
                 path.resolve(process.cwd(), "lib/publicApi/errors.ts"),

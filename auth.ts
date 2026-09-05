@@ -187,5 +187,33 @@ export const {
 
             return session;
         },
+
+        async redirect({ url, baseUrl }) {
+            // Disallow protocol-relative URLs (e.g. //attacker.com)
+            if (url.startsWith("//")) {
+                return baseUrl;
+            }
+
+            // Allow relative paths starting with single '/'
+            if (url.startsWith("/")) {
+                // Prevent path traversal or backslash tricks (e.g. /\evil.com)
+                if (url.startsWith("/\\")) {
+                    return baseUrl;
+                }
+                return `${baseUrl}${url}`;
+            }
+
+            // Allow absolute URLs only if origin strictly matches baseUrl
+            try {
+                const parsedUrl = new URL(url);
+                if (parsedUrl.origin === baseUrl) {
+                    return url;
+                }
+            } catch {
+                return baseUrl;
+            }
+
+            return baseUrl;
+        },
     },
 });

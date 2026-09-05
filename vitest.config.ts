@@ -5,13 +5,13 @@ export default defineConfig({
     test: {
         environment: "node",
         globals: false,
-        maxWorkers: 3,
+        maxWorkers: 2,
         testTimeout: 30000,
         hookTimeout: 30000,
         coverage: {
             provider: "v8",
             reporter: ["text", "json-summary"],
-            include: ["app/**", "lib/**", "auth.ts", "middleware.ts"],
+            include: ["app/**", "lib/**", "auth.ts", "proxy.ts", "instrumentation.ts"],
             exclude: [
                 "node_modules/**",
                 "tests/**",

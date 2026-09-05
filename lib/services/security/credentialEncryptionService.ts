@@ -26,6 +26,14 @@ export class KeyRotationError extends Error {
     }
 }
 
+export class KeyVaultConfigurationError extends Error {
+    public readonly code = "KEY_VAULT_CONFIGURATION_ERROR";
+    constructor(message: string = "Key vault configuration error.") {
+        super(message);
+        this.name = "KeyVaultConfigurationError";
+    }
+}
+
 export interface EncryptedSecretRecord {
     encryptedData: string;
     iv: string;
@@ -51,14 +59,60 @@ export interface DecryptionOptions {
 
 /**
  * Derives a 32-byte (256-bit) AES-GCM master encryption key from environment secrets.
+ *
+ * Security Guardrails:
+ * - In production (NODE_ENV === "production"):
+ *   - Strictly rejects the default static fallback ("aforden_default_integration_master_key_32_bytes").
+ *   - Requires INTEGRATION_KEY_ENCRYPTION_SECRET or ENCRYPTION_MASTER_KEY.
+ *   - Enforces safe minimum length (>= 32 characters/bytes).
+ *   - Throws KeyVaultConfigurationError if missing or weak.
+ * - In dev/test (NODE_ENV !== "production"):
+ *   - Preserves static fallback for local developer convenience and backward-compatible test fixtures.
+ * - Error messages never leak the secret value or partial key material.
  */
 export function deriveMasterKey(secretInput?: Buffer | string): Buffer {
+    const isProd = process.env.NODE_ENV === "production";
+
     if (Buffer.isBuffer(secretInput)) {
+        if (isProd && secretInput.length < 32) {
+            throw new KeyVaultConfigurationError(
+                "Weak master encryption key in production: Buffer key must be at least 32 bytes.",
+            );
+        }
         if (secretInput.length === 32) return secretInput;
         return crypto.createHash("sha256").update(secretInput).digest();
     }
+
+    if (typeof secretInput === "string" && secretInput.length > 0) {
+        if (isProd && secretInput.length < 32) {
+            throw new KeyVaultConfigurationError(
+                "Weak master encryption key in production: secret must be at least 32 characters long.",
+            );
+        }
+        return crypto.createHash("sha256").update(secretInput).digest();
+    }
+
+    if (isProd) {
+        const prodSecret =
+            process.env.INTEGRATION_KEY_ENCRYPTION_SECRET ||
+            process.env.ENCRYPTION_MASTER_KEY;
+
+        if (!prodSecret) {
+            throw new KeyVaultConfigurationError(
+                "Missing master encryption key in production: INTEGRATION_KEY_ENCRYPTION_SECRET or ENCRYPTION_MASTER_KEY environment variable is required.",
+            );
+        }
+
+        if (prodSecret.length < 32) {
+            throw new KeyVaultConfigurationError(
+                "Weak master encryption key in production: secret must be at least 32 characters long.",
+            );
+        }
+
+        return crypto.createHash("sha256").update(prodSecret).digest();
+    }
+
     const secret =
-        (typeof secretInput === "string" && secretInput.length > 0 ? secretInput : null) ||
         process.env.INTEGRATION_KEY_ENCRYPTION_SECRET ||
         process.env.ENCRYPTION_MASTER_KEY ||
         process.env.NEXTAUTH_SECRET ||
@@ -231,6 +285,7 @@ export function decryptSecretPayload(
         return decrypted.toString("utf-8");
     } catch (err: any) {
         if (err instanceof CredentialDecryptionError) throw err;
+        if (err instanceof KeyVaultConfigurationError) throw err;
         throw new CredentialDecryptionError(
             `Failed to decrypt secret payload: ${err.message || "authentication tag mismatch"}`,
         );

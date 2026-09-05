@@ -310,6 +310,45 @@ export class AwsS3Adapter implements IntegrationAdapter {
   }
 
   // =========================================================================
+  // Storage Security Constraints & Guardrails
+  // =========================================================================
+  public static readonly MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB max upload
+  public static readonly MAX_EXPIRY_SECONDS = 604800; // 7 days (AWS SigV4 maximum)
+  public static readonly DEFAULT_EXPIRY_SECONDS = 3600; // 1 hour
+
+  public static readonly DISALLOWED_MIME_TYPES = new Set([
+    "text/html",
+    "application/xhtml+xml",
+    "application/x-msdownload",
+    "application/x-executable",
+    "application/javascript",
+    "text/javascript",
+  ]);
+
+  private validateObjectKey(objectKey: string, workspaceId: string): { cleanKey?: string; error?: string; isForbidden?: boolean } {
+    const cleanKey = objectKey.startsWith("/") ? objectKey.slice(1) : objectKey;
+
+    // 1. Path traversal guard
+    if (cleanKey.includes("..") || cleanKey.includes("\\")) {
+      return { error: "Path traversal characters ('..' or '\\') are not permitted in object keys." };
+    }
+
+    // 2. Cross-workspace scoping guard
+    if (cleanKey.startsWith("workspaces/") || cleanKey.startsWith("tenants/")) {
+      const parts = cleanKey.split("/");
+      const pathWorkspaceId = parts[1];
+      if (pathWorkspaceId && workspaceId && pathWorkspaceId !== workspaceId) {
+        return {
+          error: "Cross-workspace access denied: object key does not belong to the active workspace.",
+          isForbidden: true,
+        };
+      }
+    }
+
+    return { cleanKey };
+  }
+
+  // =========================================================================
   // Private Subsystem Execution Methods
   // =========================================================================
 
@@ -337,9 +376,63 @@ export class AwsS3Adapter implements IntegrationAdapter {
       };
     }
 
-    const bucketName = (payload.bucket as string) || creds.bucketName || "aforden-storage";
+    const keyValidation = this.validateObjectKey(objectKey, request.workspaceId);
+    if (keyValidation.error) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_UPLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: keyValidation.isForbidden ? 403 : 400,
+        failure: {
+          code: keyValidation.isForbidden
+            ? IntegrationFailureCode.AUTHENTICATION_FAILED
+            : IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: keyValidation.error,
+          isRetryable: false,
+          httpStatusCode: keyValidation.isForbidden ? 403 : 400,
+        },
+      };
+    }
+    const cleanKey = keyValidation.cleanKey!;
+
+    const configuredBucket = creds.bucketName || "aforden-storage";
+    if (payload.bucket && payload.bucket !== configuredBucket) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_UPLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: 400,
+        failure: {
+          code: IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: `Target bucket override is not permitted; operations are restricted to configured environment bucket '${configuredBucket}'.`,
+          isRetryable: false,
+          httpStatusCode: 400,
+        },
+      };
+    }
+
+    const bucketName = configuredBucket;
     const region = (payload.region as string) || creds.region || "us-east-1";
     const contentType = (payload.contentType as string) || "application/octet-stream";
+
+    const normalizedMime = contentType.toLowerCase().trim();
+    if (AwsS3Adapter.DISALLOWED_MIME_TYPES.has(normalizedMime)) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_UPLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: 400,
+        failure: {
+          code: IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: `Upload rejected: content type '${contentType}' is not permitted for storage.`,
+          isRetryable: false,
+          httpStatusCode: 400,
+        },
+      };
+    }
 
     let bodyBuffer: Buffer;
     if (typeof payload.content === "string") {
@@ -352,8 +445,23 @@ export class AwsS3Adapter implements IntegrationAdapter {
       bodyBuffer = Buffer.from(JSON.stringify(payload.content || ""));
     }
 
+    if (bodyBuffer.length > AwsS3Adapter.MAX_UPLOAD_BYTES) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_UPLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: 400,
+        failure: {
+          code: IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: `File size (${bodyBuffer.length} bytes) exceeds maximum permitted upload limit of ${AwsS3Adapter.MAX_UPLOAD_BYTES} bytes (25MB).`,
+          isRetryable: false,
+          httpStatusCode: 400,
+        },
+      };
+    }
+
     const host = `${bucketName}.s3.${region}.amazonaws.com`;
-    const cleanKey = objectKey.startsWith("/") ? objectKey.slice(1) : objectKey;
     const url = `https://${host}/${cleanKey}`;
 
     try {
@@ -450,10 +558,49 @@ export class AwsS3Adapter implements IntegrationAdapter {
       };
     }
 
-    const bucketName = (payload.bucket as string) || creds.bucketName || "aforden-storage";
+    const keyValidation = this.validateObjectKey(objectKey, request.workspaceId);
+    if (keyValidation.error) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_DOWNLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: keyValidation.isForbidden ? 403 : 400,
+        failure: {
+          code: keyValidation.isForbidden
+            ? IntegrationFailureCode.AUTHENTICATION_FAILED
+            : IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: keyValidation.error,
+          isRetryable: false,
+          httpStatusCode: keyValidation.isForbidden ? 403 : 400,
+        },
+      };
+    }
+    const cleanKey = keyValidation.cleanKey!;
+
+    const configuredBucket = creds.bucketName || "aforden-storage";
+    if (payload.bucket && payload.bucket !== configuredBucket) {
+      return {
+        success: false,
+        capability: IntegrationCapability.FILE_DOWNLOAD,
+        action: request.action,
+        durationMs: Date.now() - start,
+        rawResponseStatus: 400,
+        failure: {
+          code: IntegrationFailureCode.PAYLOAD_VALIDATION_FAILED,
+          message: `Target bucket override is not permitted; operations are restricted to configured environment bucket '${configuredBucket}'.`,
+          isRetryable: false,
+          httpStatusCode: 400,
+        },
+      };
+    }
+
+    const bucketName = configuredBucket;
     const region = (payload.region as string) || creds.region || "us-east-1";
-    const expiresInSeconds = Number(payload.expiresInSeconds) || 3600;
-    const cleanKey = objectKey.startsWith("/") ? objectKey.slice(1) : objectKey;
+    const requestedExpiry = Number(payload.expiresInSeconds);
+    const expiresInSeconds = isNaN(requestedExpiry) || requestedExpiry <= 0
+      ? AwsS3Adapter.DEFAULT_EXPIRY_SECONDS
+      : Math.min(requestedExpiry, AwsS3Adapter.MAX_EXPIRY_SECONDS);
 
     const host = `${bucketName}.s3.${region}.amazonaws.com`;
     const presignedUrl = generatePresignedDownloadUrl({
