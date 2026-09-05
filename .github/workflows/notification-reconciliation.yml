@@ -1,0 +1,30 @@
+name: Notification Reconciliation Cron
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  reconcile:
+    name: Run Notification Reconciliation Sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Notification Reconciliation
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://aforden.aformix.com/api/cron/notification-reconciliation)
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "HTTP Status Code: $http_code"
+          echo "Response Body: $body"
+          
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::Notification reconciliation returned non-2xx HTTP status ($http_code)"
+            exit 1
+          fi
