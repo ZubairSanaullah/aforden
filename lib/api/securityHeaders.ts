@@ -107,6 +107,88 @@ export function applyPublicApiCorsHeaders(headers: Headers): void {
 }
 
 /**
+ * Resolves the appropriate X-Robots-Tag header value for defense-in-depth indexation control (Phase 1.22.9).
+ *
+ * Directives:
+ * 1. Preview Environments: Blanket "noindex, nofollow, noarchive" for *.vercel.app or VERCEL_ENV="preview".
+ * 2. Authenticated App Planes & APIs: "noindex, nofollow" for /api/*, /dashboard/*, /work-orders/*, etc.
+ * 3. Public Auth Entrypoints: "noindex, follow" for /login, /register, /forgot-password, /reset-password, /verify-email.
+ * 4. Public Indexable Pages on Production: null (crawling controlled by robots.txt and sitemap.xml).
+ */
+export function resolveRobotsTag(
+    pathname: string,
+    host?: string | null,
+    vercelEnv: string | undefined = process.env.VERCEL_ENV
+): string | null {
+    // 1. Blanket protection for all Vercel preview/branch builds
+    const cleanHost = host ? host.split(":")[0].toLowerCase() : null;
+    const isVercelPreview =
+        vercelEnv === "preview" || (cleanHost ? cleanHost.endsWith(".vercel.app") : false);
+    if (isVercelPreview) {
+        return "noindex, nofollow, noarchive";
+    }
+
+    // 2. Private application planes & backend API routes
+    const privatePrefixes = [
+        "/api/",
+        "/dashboard",
+        "/work-orders",
+        "/invoices",
+        "/quotes",
+        "/inventory",
+        "/schedules",
+        "/customers",
+        "/settings",
+        "/workspaces",
+        "/platform",
+        "/technician",
+    ];
+    if (
+        privatePrefixes.some(
+            (prefix) =>
+                pathname === prefix ||
+                pathname.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
+        )
+    ) {
+        return "noindex, nofollow";
+    }
+
+    // 3. Public authentication entrypoints
+    const authRoutes = [
+        "/login",
+        "/register",
+        "/forgot-password",
+        "/reset-password",
+        "/verify-email",
+    ];
+    if (
+        authRoutes.some(
+            (route) => pathname === route || pathname.startsWith(`${route}/`),
+        )
+    ) {
+        return "noindex, follow";
+    }
+
+    // 4. Public indexable routes (e.g. /)
+    return null;
+}
+
+/**
+ * Attaches the X-Robots-Tag header to a Headers object when applicable.
+ */
+export function applyIndexationHeaders(
+    headers: Headers,
+    pathname: string,
+    host?: string | null,
+    vercelEnv?: string
+): void {
+    const tag = resolveRobotsTag(pathname, host, vercelEnv);
+    if (tag) {
+        headers.set("X-Robots-Tag", tag);
+    }
+}
+
+/**
  * Handles CORS preflight OPTIONS requests for Public API (/api/v1/*).
  * Returns HTTP 204 with security headers and CORS headers.
  */
@@ -116,3 +198,5 @@ export function handlePublicApiPreflight(): NextResponse {
     applyPublicApiCorsHeaders(response.headers);
     return response;
 }
+
+

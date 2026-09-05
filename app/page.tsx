@@ -1,8 +1,20 @@
 import Image from "next/image";
+import { JsonLd } from "@/components/seo/JsonLd";
+import {
+  createOrganizationSchema,
+  createWebSiteSchema,
+} from "@/lib/seo/structuredData";
 
 export default function Home() {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aforden.aformix.com";
+  const orgSchema = createOrganizationSchema(baseUrl);
+  const websiteSchema = createWebSiteSchema(baseUrl);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+    <>
+      <JsonLd data={orgSchema} />
+      <JsonLd data={websiteSchema} />
+      <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
         <Image
           className="dark:invert h-5 w-[100px]"
@@ -65,5 +77,6 @@ export default function Home() {
         </div>
       </main>
     </div>
+    </>
   );
 }

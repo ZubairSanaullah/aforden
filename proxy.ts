@@ -12,6 +12,7 @@ import {
     applySecurityHeaders,
     applyPublicApiCorsHeaders,
     handlePublicApiPreflight,
+    applyIndexationHeaders,
 } from "@/lib/api/securityHeaders";
 
 /**
@@ -28,6 +29,7 @@ import {
 export function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const method = request.method.toUpperCase();
+    const host = request.headers.get("host") || request.nextUrl.host;
 
     // 1. Versioned Public API CORS & Routing (/api/v...)
     if (pathname.startsWith("/api/v")) {
@@ -36,7 +38,9 @@ export function proxy(request: NextRequest) {
         if (parsed.isPublicApi) {
             // Handle CORS preflight OPTIONS request
             if (method === "OPTIONS") {
-                return handlePublicApiPreflight();
+                const preflightResponse = handlePublicApiPreflight();
+                applyIndexationHeaders(preflightResponse.headers, pathname, host);
+                return preflightResponse;
             }
 
             const rawHeader = request.headers.get(REQUEST_ID_HEADER_NAME);
@@ -57,6 +61,7 @@ export function proxy(request: NextRequest) {
                 );
                 applySecurityHeaders(errorResponse.headers);
                 applyPublicApiCorsHeaders(errorResponse.headers);
+                applyIndexationHeaders(errorResponse.headers, pathname, host);
                 return errorResponse;
             }
 
@@ -71,6 +76,7 @@ export function proxy(request: NextRequest) {
             response.headers.set(REQUEST_ID_HEADER_NAME, requestId);
             applySecurityHeaders(response.headers);
             applyPublicApiCorsHeaders(response.headers);
+            applyIndexationHeaders(response.headers, pathname, host);
             return response;
         }
     }
@@ -80,13 +86,15 @@ export function proxy(request: NextRequest) {
         const securityResponse = applyApiSecurityMiddleware(request);
         if (securityResponse) {
             // Security error responses (413, 429) already have security headers attached
+            applyIndexationHeaders(securityResponse.headers, pathname, host);
             return securityResponse;
         }
     }
 
-    // 3. Downstream Response with Canonical Security Headers
+    // 3. Downstream Response with Canonical Security & Indexation Headers
     const response = NextResponse.next();
     applySecurityHeaders(response.headers);
+    applyIndexationHeaders(response.headers, pathname, host);
     return response;
 }
 
